@@ -1,0 +1,26 @@
+node_modules
+
+# Saída do build
+/build
+/.svelte-kit
+/.vercel
+/playwright-report
+/test-results
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Editores e ferramentas
+.claude/
+.vscode/
+.idea/
+
+# Variáveis de ambiente
+.env
+.env.*
+!.env.example
+
+# Vite
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*

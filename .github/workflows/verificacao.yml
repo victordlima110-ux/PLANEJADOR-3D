@@ -1,0 +1,30 @@
+name: Verificação
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Tipos, testes e build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Conferir o catálogo de móveis
+        run: npm run catalog:check
+      - name: Conferir os tipos
+        run: npm run check
+      - name: Rodar os testes
+        run: npm test
+      - name: Compilar o site
+        run: npm run build
