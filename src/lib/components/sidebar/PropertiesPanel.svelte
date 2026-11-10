@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MEDIDAS_PADRAO } from '$lib/utils/sugestoes';
   import { wallMaterialLabels } from '$lib/i18n/wallMaterialLabels';
   import { entourageLabels } from '$lib/i18n/entourageLabels';
   import { roomTypeLabels, roomColorLabels, floorGroupLabels, floorMaterialLabels } from '$lib/i18n/roomPropertyLabels';
@@ -389,6 +390,20 @@
         <span class="text-xs text-gray-500">{$t('wallProperties.thickness')} ({unitLabel()})</span>
         <input type="number" value={displayValue(selectedWall.thickness)} oninput={onWallThickness} onblur={onWallThickness} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
       </label>
+      <!--
+        Atalhos para as medidas usuais da construção brasileira. São sugestão,
+        não limite: o campo acima continua aceitando qualquer valor.
+      -->
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-[11px] text-gray-400">{$t('medidasPadrao.titulo')}</span>
+        {#each MEDIDAS_PADRAO.paredeEspessura as medida (medida)}
+          <button
+            type="button"
+            class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:border-blue-400 hover:text-blue-700"
+            onclick={() => updateWall(selectedWall!.id, { thickness: medida })}
+          >{medida}</button>
+        {/each}
+      </div>
       <div class="grid grid-cols-2 gap-2">
         <label class="block">
           <span class="text-xs text-gray-500">{$t('wallProperties.startHeight')} ({unitLabel()})</span>
@@ -547,6 +562,20 @@
         <span class="text-xs text-gray-500">{$t('openingProperties.width')} ({unitLabel()})</span>
         <input type="number" value={displayValue(selectedDoor.width)} oninput={onDoorWidth} onblur={onDoorWidth} step="any" min="0" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
       </label>
+      <!--
+        Atalhos para as medidas usuais da construção brasileira. São sugestão,
+        não limite: o campo acima continua aceitando qualquer valor.
+      -->
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-[11px] text-gray-400">{$t('medidasPadrao.titulo')}</span>
+        {#each MEDIDAS_PADRAO.portaLargura as medida (medida)}
+          <button
+            type="button"
+            class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:border-blue-400 hover:text-blue-700"
+            onclick={() => updateDoor(selectedDoor!.id, { width: medida })}
+          >{medida}</button>
+        {/each}
+      </div>
       <label class="block">
         <span class="text-xs text-gray-500">{$t('openingProperties.fromA')} ({unitLabel()})</span>
         <input type="number" value={displayValue(doorDistFromA)} oninput={onDoorDistFromA} onblur={onDoorDistFromA} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
@@ -619,6 +648,20 @@
         <span class="text-xs text-gray-500">{$t('openingProperties.width')} ({unitLabel()})</span>
         <input type="number" value={displayValue(selectedWindow.width)} oninput={onWindowWidth} onblur={onWindowWidth} step="any" min="0" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
       </label>
+      <!--
+        Atalhos para as medidas usuais da construção brasileira. São sugestão,
+        não limite: o campo acima continua aceitando qualquer valor.
+      -->
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-[11px] text-gray-400">{$t('medidasPadrao.titulo')}</span>
+        {#each MEDIDAS_PADRAO.janelaLargura as medida (medida)}
+          <button
+            type="button"
+            class="rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:border-blue-400 hover:text-blue-700"
+            onclick={() => updateWindow(selectedWindow!.id, { width: medida })}
+          >{medida}</button>
+        {/each}
+      </div>
       <label class="block">
         <span class="text-xs text-gray-500">{$t('openingProperties.fromA')} ({unitLabel()})</span>
         <input type="number" value={displayValue(windowDistFromA)} oninput={onWindowDistFromA} onblur={onWindowDistFromA} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />

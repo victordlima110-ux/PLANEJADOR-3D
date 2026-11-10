@@ -14,6 +14,15 @@
   let left = $derived(tip ? Math.max(margin, Math.min(tip.x, viewportWidth - tipWidth - margin)) : margin);
   let top = $derived(tip ? Math.max(margin, Math.min(tip.y, viewportHeight - tipHeight - margin)) : margin);
 
+  /**
+   * No celular a dica não segue o ponto que a disparou: ali em cima ficam os
+   * botões de ação, e uma dica por cima deles esconde justamente o que a pessoa
+   * precisa tocar. Então ela encosta embaixo, logo acima da barra de ferramentas.
+   */
+  let posicao = $derived($telaPequena
+    ? `left:${margin}px;right:${margin}px;bottom:calc(5.5rem + env(safe-area-inset-bottom, 0px));width:auto;max-height:${Math.max(0, viewportHeight / 2)}px;`
+    : `left:${left}px;top:${top}px;width:${Math.max(0, Math.min(280, viewportWidth - margin * 2))}px;max-height:${Math.max(0, viewportHeight - margin * 2)}px;`);
+
   $effect(() => {
     visible = false;
     if (tip) {
@@ -39,7 +48,7 @@
     class="fixed z-[9999] pointer-events-auto flex flex-col gap-2 bg-slate-800 text-white rounded-xl shadow-2xl px-4 py-3 text-sm leading-relaxed transition-opacity duration-300 ease-out max-w-[calc(100vw-1rem)]"
     class:opacity-0={!visible}
     class:opacity-100={visible}
-    style="left:{left}px;top:{top}px;width:{Math.max(0, Math.min(280, viewportWidth - margin * 2))}px;max-height:{Math.max(0, viewportHeight - margin * 2)}px;"
+    style={posicao}
   >
     <p class="min-h-0 overflow-y-auto">{$t($telaPequena ? `onboarding.${tip.id}.toque` : `onboarding.${tip.id}`)}</p>
     <button

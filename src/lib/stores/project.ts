@@ -4,7 +4,8 @@ import { splitWallGeometry } from '$lib/utils/splitWallGeometry';
 import { wallPathProfile } from '$lib/utils/wallProfiles';
 import { duplicatePlanSelection, pastePlanSelection, shiftedOpeningPosition } from '$lib/utils/duplicateSelection';
 import { writable, derived, get, type Writable } from 'svelte/store';
-import type { Project, Floor, Wall, Door, Window as Win, FurnitureItem, Point, Stair, Column, BackgroundImage, GuideLine, ElementGroup, EntourageItem, InterchangeState } from '$lib/models/types';
+import type { Project, Floor, Wall, Door, Window as Win, FurnitureItem, Point, Stair, Column, BackgroundImage, GuideLine, ElementGroup, EntourageItem, InterchangeState, Lote } from '$lib/models/types';
+import { loteValido, paredesForaDoLote } from '$lib/utils/lote';
 import { planWallResize, finitePoint, validPositiveDimension, validOpeningPosition, type WallEndpoint } from '$lib/utils/wallEditing';
 import { getOuterWalls } from '$lib/utils/outerWalls';
 import { nextFloorLevel, floorElevations, validFloorElevation, orderedFloors, DEFAULT_FLOOR_SPACING } from '$lib/utils/floors';
@@ -993,6 +994,26 @@ export function updateProjectName(name: string) {
   p.updatedAt = new Date();
   currentProject.set({ ...p });
 }
+
+/** Define ou troca o lote do projeto. Passar `null` remove o terreno. */
+export function definirLote(lote: Lote | null) {
+  const p = get(currentProject);
+  if (!p) return;
+  if (lote && !loteValido(lote)) return;
+  const atual = JSON.stringify(p.lote ?? null), proximo = JSON.stringify(lote ?? null);
+  if (atual === proximo) return;
+  snapshot('Site outline', 'lote');
+  if (lote) p.lote = lote; else delete p.lote;
+  p.updatedAt = new Date();
+  currentProject.set({ ...p });
+}
+
+/** O lote do projeto aberto, ou undefined enquanto não houver um. */
+export const loteDoProjeto = derived(currentProject, (p) => p?.lote);
+
+/** Paredes do pavimento ativo que passam da área construível do lote. */
+export const paredesForaDoLoteStore = derived([activeFloor, loteDoProjeto], ([floor, lote]) =>
+  floor ? paredesForaDoLote(floor.walls, lote) : new Set<string>());
 
 /** The Settings dialog edits per keystroke; rapid edits share one step. */
 export function updateProjectDescription(description: string) {

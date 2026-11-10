@@ -30,6 +30,9 @@
   import { openingDropTarget } from '$lib/utils/openingDrop';
   import { getWallTextureCanvas, getFloorTextureCanvas, setTextureLoadCallback } from '$lib/utils/textureGenerator';
   import { telaPequena } from '$lib/stores/telaPequena';
+  import { loteDoProjeto, paredesForaDoLoteStore } from '$lib/stores/project';
+  import { loteValido, retanguloConstruivel, retanguloDoLote } from '$lib/utils/lote';
+  import { modeloDeAmbiente, sugerirAmbiente, type SugestaoDeAmbiente } from '$lib/utils/sugestoes';
   import { projectSettings, formatLength, formatArea } from '$lib/stores/settings';
   import type { ProjectSettings } from '$lib/stores/settings';
   import { snapStatus } from '$lib/utils/snapStep';
@@ -441,6 +444,59 @@
     markDirty();
   }
 
+  /**
+   * Divisa do lote e, quando houver recuos, a linha da área construível.
+   *
+   * Vai antes da grade e das paredes: é pano de fundo, uma referência de onde
+   * a casa pode ficar — não um elemento que se seleciona ou se arrasta.
+   */
+  function drawLote() {
+    const lote = $loteDoProjeto;
+    if (!ctx || !loteValido(lote)) return;
+    const divisa = retanguloDoLote(lote);
+    const construivel = retanguloConstruivel(lote);
+
+    const canto = worldToScreen(divisa.esquerda, divisa.topo);
+    const larguraTela = (divisa.direita - divisa.esquerda) * zoom;
+    const alturaTela = (divisa.base - divisa.topo) * zoom;
+
+    ctx.save();
+    // Terreno levemente tingido, para separar do fundo sem competir com a planta.
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.05)';
+    ctx.fillRect(canto.x, canto.y, larguraTela, alturaTela);
+    ctx.strokeStyle = '#059669';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.strokeRect(canto.x, canto.y, larguraTela, alturaTela);
+
+    if (construivel.esquerda !== divisa.esquerda || construivel.direita !== divisa.direita
+      || construivel.topo !== divisa.topo || construivel.base !== divisa.base) {
+      const cantoRecuo = worldToScreen(construivel.esquerda, construivel.topo);
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 5]);
+      ctx.strokeRect(cantoRecuo.x, cantoRecuo.y,
+        (construivel.direita - construivel.esquerda) * zoom, (construivel.base - construivel.topo) * zoom);
+      ctx.setLineDash([]);
+    }
+
+    // Rótulo do lado da rua, para não haver dúvida de como o terreno está virado.
+    const meio = {
+      cima: { x: (divisa.esquerda + divisa.direita) / 2, y: divisa.topo },
+      baixo: { x: (divisa.esquerda + divisa.direita) / 2, y: divisa.base },
+      esquerda: { x: divisa.esquerda, y: (divisa.topo + divisa.base) / 2 },
+      direita: { x: divisa.direita, y: (divisa.topo + divisa.base) / 2 },
+    }[lote.frente];
+    const rotulo = worldToScreen(meio.x, meio.y);
+    const deslocamento = lote.frente === 'cima' ? -10 : lote.frente === 'baixo' ? 18 : 0;
+    ctx.fillStyle = '#047857';
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText($t('lote.rua'), rotulo.x, rotulo.y + deslocamento);
+    ctx.restore();
+  }
+
   function drawGrid() {
     if (!ctx || !showGrid) return;
     const step = (currentSnapToGrid ? currentGridSize : GRID) * zoom;
@@ -540,6 +596,38 @@
 
   function drawWall(w: Wall, selected: boolean) {
     _drawWall(getCS(), w, selected, showDimensions, dimSettings, currentFloor?.walls);
+  }
+
+  /**
+   * Marca em vermelho as paredes que passam da divisa do lote.
+   *
+   * É um traço por cima, não uma troca de cor da parede: o aviso é do momento,
+   * some quando a parede volta para dentro e não entra nas exportações.
+   */
+  function drawParedesForaDoLote() {
+    const fora = $paredesForaDoLoteStore;
+    if (!ctx || fora.size === 0 || !currentFloor) return;
+    ctx.save();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([7, 4]);
+    ctx.lineCap = 'round';
+    for (const parede of currentFloor.walls) {
+      if (!fora.has(parede.id)) continue;
+      const inicio = worldToScreen(parede.start.x, parede.start.y);
+      const fim = worldToScreen(parede.end.x, parede.end.y);
+      ctx.beginPath();
+      ctx.moveTo(inicio.x, inicio.y);
+      if (parede.curvePoint) {
+        const controle = worldToScreen(parede.curvePoint.x, parede.curvePoint.y);
+        ctx.quadraticCurveTo(controle.x, controle.y, fim.x, fim.y);
+      } else {
+        ctx.lineTo(fim.x, fim.y);
+      }
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   function drawDoorOnWall(wall: Wall, door: Door) {
@@ -923,9 +1011,55 @@
     roomPolygons = new Map(geometry.map(({ room, polygon }) => [room.id, polygon]));
     const holes = roomHoles(geometry.map(g => g.polygon));
     roomHolePolygons = new Map(geometry.map((g,i) => [g.room.id,holes[i]]));
+    const eramConhecidos = new Set(detectedRooms.map(room => room.id));
     lastRoomFloorId = currentFloor.id;
     detectedRooms = newRooms;
     detectedRoomsStore.set(newRooms);
+    for (const { room, polygon } of geometry) {
+      if (!eramConhecidos.has(room.id)) ofereceraMobilia(room.id, polygon);
+    }
+  }
+
+  /* ── Sugestão de mobília ao fechar um ambiente ─────────────────────────── */
+
+  let sugestao = $state<{ roomId: string; centro: Point; sugestao: SugestaoDeAmbiente } | null>(null);
+  /** Ambientes já oferecidos: a sugestão não volta a aparecer para o mesmo cômodo. */
+  const jaOferecidos = new Set<string>();
+
+  /**
+   * Oferece a mobília típica assim que um ambiente novo é detectado.
+   *
+   * É oferta, não automatismo: entra móvel nenhum sem a pessoa tocar no botão,
+   * e cada ambiente só é oferecido uma vez, para a sugestão não virar incômodo
+   * a cada parede que encosta.
+   */
+  function ofereceraMobilia(roomId: string, polygon: Point[]) {
+    if (jaOferecidos.has(roomId) || polygon.length < 3) return;
+    jaOferecidos.add(roomId);
+    const xs = polygon.map(ponto => ponto.x), ys = polygon.map(ponto => ponto.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const palpite = sugerirAmbiente(maxX - minX, maxY - minY);
+    // Sem mobília a sugerir (corredor, lavabo), não há o que oferecer.
+    if (!palpite?.template) return;
+    sugestao = { roomId, centro: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, sugestao: palpite };
+  }
+
+  function aceitarSugestao() {
+    const atual = sugestao;
+    sugestao = null;
+    const modelo = modeloDeAmbiente(atual?.sugestao.template ?? null);
+    if (!atual || !modelo) return;
+    beginUndoGroup();
+    try {
+      for (const item of modelo.furniture) {
+        const id = addFurniture(item.catalogId, { x: atual.centro.x + item.x, y: atual.centro.y + item.y });
+        if (item.rotation !== 0) rotateFurniture(id, item.rotation);
+      }
+    } finally {
+      endUndoGroup('Placed room template');
+    }
+    markDirty();
   }
 
   function drawGuides() {
@@ -1132,6 +1266,7 @@
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = '#f8f9fa';
     ctx.fillRect(0, 0, width, height);
+    drawLote();
     drawGrid();
     if (layerVis.guides) drawGuides();
     drawBackgroundImage();
@@ -1156,6 +1291,7 @@
     if (layerVis.walls) {
       for (const w of floor.walls) drawWall(w, isSelected(w.id));
       drawWallJoints(floor, selId);
+      drawParedesForaDoLote();
     }
 
     if (showDoors) {
@@ -1972,11 +2108,23 @@
   }
 
   function getFitBounds(fittedZoom = 1) {
-    return (currentFloor && boundsForFloor(currentFloor, fittedZoom))
+    const doPavimento = (currentFloor && boundsForFloor(currentFloor, fittedZoom))
       || (layerVis.floorBelow && floorBelow && boundsForFloor({
         ...floorBelow, furniture: [], doors: [], windows: [], columns: [], entourage: [],
         measurements: [], annotations: [], textAnnotations: [], backgroundImage: undefined,
       }, fittedZoom));
+    // O terreno entra no enquadramento: quem acabou de informar as medidas do
+    // lote espera vê-lo inteiro, e num projeto ainda vazio ele é o único
+    // conteúdo que existe para enquadrar.
+    const lote = $loteDoProjeto;
+    if (!loteValido(lote)) return doPavimento;
+    const divisa = retanguloDoLote(lote);
+    const doLote = { minX: divisa.esquerda, maxX: divisa.direita, minY: divisa.topo, maxY: divisa.base };
+    if (!doPavimento) return doLote;
+    return {
+      minX: Math.min(doPavimento.minX, doLote.minX), maxX: Math.max(doPavimento.maxX, doLote.maxX),
+      minY: Math.min(doPavimento.minY, doLote.minY), maxY: Math.max(doPavimento.maxY, doLote.maxY),
+    };
   }
 
   function visibleCanvasHeight() {
@@ -2723,6 +2871,48 @@
       wallStart = null;
       wallSequenceFirst = null;
     }
+  }
+
+  /* ── Barra de confirmação do traçado (celular) ──────────────────────────
+     No dedo não há clique duplo confiável nem tecla C, então as mesmas ações
+     viram botões grandes logo abaixo da barra superior. */
+
+  /** Distância do ponto atual até o começo do contorno, ou null se não há contorno aberto. */
+  function distanciaAteOComeco(): number | null {
+    if (!wallStart || !wallSequenceFirst) return null;
+    return Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y);
+  }
+
+  /** O contorno já tem trechos suficientes para valer a pena fechar. */
+  function podeFecharAmbiente(): boolean {
+    const distancia = distanciaAteOComeco();
+    return distancia !== null && distancia > 5;
+  }
+
+  /**
+   * Quando falta pouco para o contorno fechar, vale sugerir em vez de só permitir.
+   * Dois metros é a folga que ainda parece "quase lá" numa planta de casa.
+   */
+  function quaseFechando(): boolean {
+    const distancia = distanciaAteOComeco();
+    return distancia !== null && distancia > 5 && distancia <= 200;
+  }
+
+  function fecharAmbiente() {
+    if (!podeFecharAmbiente()) return;
+    addWall(wallStart!, wallSequenceFirst!);
+    wallStart = null;
+    wallSequenceFirst = null;
+    typedWallLength = '';
+    markDirty();
+  }
+
+  /** Encerra o traçado onde está, mantendo as paredes já desenhadas. */
+  function terminarTracado() {
+    wallStart = null;
+    wallSequenceFirst = null;
+    typedWallLength = '';
+    markDirty();
   }
 
   function onMouseMove(e: MouseEvent) {
@@ -4210,9 +4400,32 @@
     {/if}
   {/if}
   {#if currentTool === 'wall' && wallStart}
-    <div class="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-xs shadow">
-      {$t('canvasHints.wall')}
-    </div>
+    {#if telaDeCelular}
+      <div class="absolute top-2 inset-x-2 z-30 flex flex-col gap-1.5">
+        {#if quaseFechando()}
+          <p role="status" class="self-center rounded-full bg-amber-400 px-3 py-1 text-[11px] font-medium text-amber-950 shadow">
+            {$t('tracadoParede.quaseFechando')}
+          </p>
+        {/if}
+        <div class="flex items-stretch gap-1.5 rounded-xl bg-white/95 p-1.5 shadow-lg backdrop-blur">
+          <button
+            type="button"
+            class="min-h-11 flex-1 rounded-lg bg-blue-600 px-2 text-sm font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400"
+            disabled={!podeFecharAmbiente()}
+            onclick={fecharAmbiente}
+          >{$t('tracadoParede.fechar')}</button>
+          <button
+            type="button"
+            class="min-h-11 flex-1 rounded-lg bg-slate-100 px-2 text-sm font-semibold text-slate-700"
+            onclick={terminarTracado}
+          >{$t('tracadoParede.terminar')}</button>
+        </div>
+      </div>
+    {:else}
+      <div class="absolute top-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-xs shadow">
+        {$t('canvasHints.wall')}
+      </div>
+    {/if}
   {/if}
   {#if currentPlacingId && currentTool === 'furniture'}
     <div class="absolute top-2 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-3 py-1 rounded-full text-xs shadow">
@@ -4280,7 +4493,65 @@
       disabled={fitSelectionIds().size === 0}
       onclick={() => zoomToFit(true)}
     >⊡</button>
+    <!--
+      Mãozinha de arrastar a planta. Na barra superior ela some abaixo de 1280 px,
+      então aqui ela aparece justamente nessas telas, junto do zoom — que é o
+      lugar natural de um controle de vista.
+    -->
+    <div class="w-px h-5 bg-gray-200 xl:hidden"></div>
+    <button
+      class="xl:hidden w-9 h-9 max-md:w-10 max-md:h-10 flex items-center justify-center rounded transition-colors {$panMode ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'}"
+      title={$t('toolbarView.panHint')}
+      aria-label={$t('toolbarView.panLabel')}
+      aria-pressed={$panMode}
+      onclick={() => panMode.update(v => !v)}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v1"/><path d="M14 10V4a2 2 0 0 0-4 0v2"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+    </button>
   </div>
+
+  <!--
+    Aviso de parede fora do lote. Fica no alto: embaixo ele brigaria com a dica
+    de boas-vindas e com a barra de ferramentas. Enquanto a barra de traçado
+    está aberta, desce o suficiente para não cobri-la.
+  -->
+  {#if $paredesForaDoLoteStore.size > 0}
+    <div
+      role="status"
+      class="absolute right-2 z-30 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 shadow-md max-md:left-2 max-md:right-2"
+      style:top={telaDeCelular && currentTool === 'wall' && wallStart ? '5.25rem' : '0.5rem'}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="shrink-0" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <span>{$paredesForaDoLoteStore.size === 1
+        ? $t('lote.foraUma')
+        : $t('lote.foraVarias', { quantidade: $paredesForaDoLoteStore.size })}</span>
+    </div>
+  {/if}
+
+  <!-- Oferta de mobília logo que um ambiente fecha. Some ao ser recusada. -->
+  {#if sugestao}
+    <div
+      role="status"
+      class="absolute left-1/2 z-30 w-[min(22rem,calc(100%-1rem))] -translate-x-1/2 rounded-xl border border-blue-200 bg-white p-3 shadow-xl"
+      style:bottom={telaDeCelular ? 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' : '4.5rem'}
+    >
+      <p class="text-sm text-slate-700">
+        {$t('sugestao.pergunta', { ambiente: $t(sugestao.sugestao.chave as Parameters<typeof $t>[0]) })}
+      </p>
+      <div class="mt-2.5 flex gap-2">
+        <button
+          type="button"
+          class="min-h-10 flex-1 rounded-lg bg-blue-600 text-sm font-semibold text-white"
+          onclick={aceitarSugestao}
+        >{$t('sugestao.aceitar')}</button>
+        <button
+          type="button"
+          class="min-h-10 rounded-lg px-4 text-sm font-medium text-slate-500"
+          onclick={() => sugestao = null}
+        >{$t('sugestao.recusar')}</button>
+      </div>
+    </div>
+  {/if}
 
   {#if splitBlocked}
     <div role="status" class="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-md max-w-[90%]">

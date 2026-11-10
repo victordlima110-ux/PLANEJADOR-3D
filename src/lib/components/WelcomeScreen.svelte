@@ -9,6 +9,8 @@
   import { goto } from '$app/navigation';
   import { base } from '$app/paths';
   import { createDefaultProject } from '$lib/stores/project';
+  import LoteFormulario from '$lib/components/LoteFormulario.svelte';
+  import type { Lote } from '$lib/models/types';
   import { houseTemplates } from '$lib/utils/houseTemplates';
   import { modalDialog, reconcileNativeClose } from '$lib/utils/modalDialog';
 
@@ -44,10 +46,27 @@
     } catch (error) { importError = error instanceof Error ? error.message : $t('welcome.projectFailed'); }
   }
 
-  function startFromScratch() { return createProject(() => createDefaultProject('Projeto sem título')); }
+  /**
+   * Antes do projeto em branco, a pessoa informa o terreno.
+   *
+   * Perguntar aqui, e não depois, tem razão de ser: a planta já nasce dentro de
+   * um limite conhecido, em vez de ser desenhada solta e esbarrar na divisa
+   * quando já está pronta. Quem não sabe as medidas ainda pula a etapa.
+   */
+  function startFromScratch() { pedindoLote = true; }
+
+  function criarComLote(lote: Lote | null) {
+    pedindoLote = false;
+    return createProject(() => {
+      const projeto = createDefaultProject('Projeto sem título');
+      if (lote) projeto.lote = lote;
+      return projeto;
+    });
+  }
   function useHouseTemplate(index: number) { return createProject(houseTemplates[index].create); }
 
   let showTemplates = $state(false);
+  let pedindoLote = $state(false);
   let showImport = $state(false);
 
   let fileInput: HTMLInputElement;
@@ -134,6 +153,13 @@
           {tourStep < tourSteps.length - 1 ? $t('welcome.next') : $t('welcome.getStarted')}
         </button>
       </div>
+    </div>
+  {:else if pedindoLote}
+    <!-- Terreno, antes de abrir o projeto em branco -->
+    <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
+      <button onclick={() => pedindoLote = false} class="text-gray-400 hover:text-gray-600 mb-4 text-sm">{$t('welcome.back')}</button>
+      <h2 class="text-2xl font-bold text-gray-800 mb-1 text-center">{$t('lote.titulo')}</h2>
+      <LoteFormulario aoConfirmar={criarComLote} aoPular={() => criarComLote(null)} />
     </div>
   {:else if showTemplates}
     <!-- Template grid -->

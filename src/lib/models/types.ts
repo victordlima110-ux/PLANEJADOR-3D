@@ -268,7 +268,30 @@ export interface InterchangeState {
   planNotes?: string;
 }
 
+/**
+ * O lote onde a casa é construída, em centímetros.
+ *
+ * Serve de referência de tamanho e de limite: parede que passa da divisa é
+ * marcada em vermelho. O lote é um retângulo porque é o formato da quase
+ * totalidade dos lotes urbanos, e porque informar dois números é muito mais
+ * rápido do que desenhar um contorno.
+ */
+export interface Lote {
+  /** Medida da frente, de uma divisa lateral à outra. */
+  largura: number;
+  /** Medida da frente até o fundo. */
+  profundidade: number;
+  /** Canto da frente à esquerda de quem olha da rua. */
+  origem: Point;
+  /** Para que lado da planta fica a rua. */
+  frente: 'cima' | 'baixo' | 'esquerda' | 'direita';
+  /** Recuos obrigatórios em cm, quando a pessoa informar. */
+  recuos?: { frente?: number; fundo?: number; esquerda?: number; direita?: number };
+}
+
 export interface Project {
+  /** Lote do terreno; ausente nos projetos feitos antes desta opção existir. */
+  lote?: Lote;
   customModels?: CustomModelDef[];
   attachmentNames?: Record<string, string>;
   projectPackage?: ProjectPackageState;

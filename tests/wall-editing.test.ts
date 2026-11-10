@@ -45,10 +45,14 @@ describe('connected wall dimensions', () => {
     expect(floor().walls[0].end.x).toBeCloseTo(500.25);
     expect(floor().walls[0].end.y).toBe(0);
     expect(floor().walls[1].start).toEqual(floor().walls[0].end);
-    expect(floor().walls[1].end).toEqual({ x: 400, y: 300 });
+    // A lateral continua vertical e acompanha o canto, em vez de virar diagonal:
+    // esticar um lado do retângulo dá outro retângulo, não um trapézio.
+    expect(floor().walls[1].end.x).toBeCloseTo(500.25);
+    expect(floor().walls[1].end.y).toBe(300);
+    expect(floor().walls[2].end).toEqual({ x: 0, y: 300 });
     expect(resolveRooms(floor())).toHaveLength(1);
     expect(resolveRooms(floor())[0]).toMatchObject({ id: 'named-room', name: 'Kitchen & Dining', color: '#abcdef', floorTexture: 'tile', labelOffset: { x: 12, y: 4 } });
-    expect(resolveRooms(floor())[0].area).toBeCloseTo((400 + 500.25) / 2 * 300 / 10000);
+    expect(resolveRooms(floor())[0].area).toBeCloseTo(500.25 * 300 / 10000);
     expect(floor().walls[0]).toMatchObject({ ...oldWall, end: floor().walls[0].end });
     expect(floor().doors).toEqual(doors); expect(floor().windows).toEqual(windows);
     expect(get(currentProject)!.floors[1]).toEqual(other);
