@@ -1,11 +1,12 @@
-import adapter from '@sveltejs/adapter-static';
+import adapter from '@sveltejs/adapter-vercel';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   kit: {
-    // O aplicativo roda inteiro no navegador: não há servidor, banco nem conta.
-    // A saída é um site estático, que a Vercel publica de graça.
-    adapter: adapter({ fallback: 'index.html', strict: false }),
+    // O programa roda inteiro no navegador: não há servidor, banco nem conta.
+    // Como todas as páginas são pré-renderizadas (ver src/routes/+layout.ts),
+    // a Vercel publica só arquivos estáticos — sem função serverless e sem custo.
+    adapter: adapter(),
   },
 };
 
