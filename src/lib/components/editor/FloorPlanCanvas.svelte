@@ -43,6 +43,7 @@
   import { translatedWallGeometry, wallGeometryOf, type WallGeometry } from '$lib/utils/wallTranslation';
   import { marqueeSelectionIds } from '$lib/utils/marqueeSelection';
   import { isTracingImageType } from '$lib/utils/tracingImage';
+  import { referenciasDeAlinhamento, semOPonto, alinharPonto, guiasVisiveis, eixosLivresDoTracado } from '$lib/utils/alinhamento';
   import { findRoomLabelAt as _findRoomLabelAt, positionOnWall, findWallAt as _findWallAt, findHandleAt as _findHandleAt, findFurnitureAt as _findFurnitureAt, findColumnAt as _findColumnAt, findStairAt as _findStairAt, findDoorAt as _findDoorAt, findWindowAt as _findWindowAt, findRoomAt as _findRoomAt, hitTestMeasurement as _hitTestMeasurement, hitTestAnnotation as _hitTestAnnotation, hitTestTextAnnotation as _hitTestTextAnnotation, findEntourageAt, definirFolgaDeToque } from '$lib/utils/hitTesting';
 
   let canvas: HTMLCanvasElement;
@@ -1629,6 +1630,27 @@
     if (wallStart && currentTool === 'wall' && previaDeParedeVisivel()) {
       drawAngleGuides(wallStart);
       const endPt = applyTypedWallLength(snapWallEndPoint(mousePos));
+
+      // Tracejado vermelho até a ponta de parede com que esta ficou alinhada.
+      // Vai antes do corpo da parede e das etiquetas, que continuam por cima.
+      for (const guia of guiasVisiveis(endPt, referenciasParaAlinhar())) {
+        const de = worldToScreen(guia.referencia.x, guia.referencia.y);
+        const ate = worldToScreen(endPt.x, endPt.y);
+        ctx.save();
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([7, 5]);
+        ctx.beginPath();
+        ctx.moveTo(de.x, de.y);
+        ctx.lineTo(ate.x, ate.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(de.x, de.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       const s = worldToScreen(wallStart.x, wallStart.y);
       const e = worldToScreen(endPt.x, endPt.y);
       const dx = e.x - s.x, dy = e.y - s.y;
@@ -3582,8 +3604,28 @@
 
   // ── Exact-length wall entry (issue #6) ────────────────────────────
   /** Shared endpoint snapping for wall drawing: magnetic + Shift/angle snap. */
+  /**
+   * As pontas de parede que podem servir de guia agora.
+   *
+   * Todas as do pavimento, menos o começo do traçado em andamento — alinhar
+   * com ele encolheria a parede até o nada.
+   */
+  function referenciasParaAlinhar(): Point[] {
+    if (!currentFloor) return [];
+    return semOPonto(referenciasDeAlinhamento(currentFloor.walls), wallStart);
+  }
+
   function snapWallEndPoint(raw: Point): Point {
-    let endPt = magneticSnap(raw);
+    const ima = magneticSnap(raw);
+    let endPt: Point = { x: ima.x, y: ima.y };
+    // Encostar de verdade numa parede existente vale mais do que ficar no
+    // prumo de uma distante: quando o ímã já encaixou, a guia não entra.
+    const podeAlinhar = currentSnapEnabled && !ima.snappedToEndpoint && !ima.snappedToWall;
+    const tolerancia = MAGNETIC_SNAP / zoom;
+    // O primeiro ponto não recebe alinhamento: ainda não há parede nenhuma na
+    // tela para o tracejado explicar, e um ponto que pula sozinho sem motivo
+    // visível assusta mais do que ajuda. Encostar numa parede existente já é
+    // trabalho do ímã, acima.
     if (!wallStart) return endPt;
     if (shiftDown) {
       // Force strict angle snap when Shift is held (0°, 45°, 90°, 135°, 180°)
@@ -3599,6 +3641,14 @@
       }
     } else {
       endPt = angleSnap(wallStart, endPt);
+    }
+    // Só depois do ângulo, e só no eixo que sobrou livre: a parede que acabou
+    // de ficar reta não pode entortar para alcançar um alinhamento. Numa
+    // parede em diagonal, nenhum eixo está livre nesse sentido, então ela fica
+    // como a pessoa desenhou.
+    if (podeAlinhar) {
+      const eixos = eixosLivresDoTracado(wallStart, endPt);
+      if (eixos !== 'ambos') endPt = alinharPonto(endPt, referenciasParaAlinhar(), tolerancia, eixos);
     }
     return endPt;
   }
