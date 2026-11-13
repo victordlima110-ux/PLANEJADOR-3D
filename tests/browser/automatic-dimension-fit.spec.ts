@@ -13,7 +13,7 @@ for (const width of [1440, 390]) {
       };
       const fill = CanvasRenderingContext2D.prototype.fillText;
       CanvasRenderingContext2D.prototype.fillText = function(text, x, y, maxWidth) {
-        const key = this.fillStyle === '#123abc' ? `wall-${text}-${x}` : this.fillStyle === '#b0b8c4' ? 'internal' : null;
+        const key = this.fillStyle === '#123abc' ? `wall-${text}-${x}` : this.fillStyle === '#6b7280' ? 'internal' : null;
         if (key && this.canvas.getAttribute('aria-label') === 'Floor plan editor canvas') {
           const m = this.measureText(text), t = this.getTransform(), b = this.canvas.getBoundingClientRect();
           const a = new DOMPoint(x - m.actualBoundingBoxLeft, y - m.actualBoundingBoxAscent).matrixTransform(t);

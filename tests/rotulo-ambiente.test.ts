@@ -20,6 +20,9 @@ function contextoFalso(larguraPorLetra = 6) {
     fillRect: vi.fn(), strokeRect: vi.fn(), translate: vi.fn(), rotate: vi.fn(), scale: vi.fn(),
     measureText: (t: string) => ({ width: t.length * larguraPorLetra }),
     fillText: (texto: string, x: number, y: number) => { escritos.push({ texto, x, y }); },
+    // O contorno branco de legibilidade é desenhado antes do preenchimento e
+    // escreve o mesmo texto: aqui ele é ignorado para não contar duas vezes.
+    strokeText: () => {},
     canvas: { width: 800, height: 600 },
   } as unknown as CanvasRenderingContext2D;
   return { ctx, escritos };

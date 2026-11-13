@@ -1529,9 +1529,22 @@ export function drawRooms(
     const espacoLivre = cotasInternas ? larguraNaTela / 3 : larguraNaTela - 8;
     const cabe = (texto: string) => ctx.measureText(texto).width <= espacoLivre;
 
+    // O nome e a medida são escritos por cima do piso do ambiente, que pode ser
+    // madeira, cerâmica escura ou qualquer cor do catálogo. Em cinza claro eles
+    // sumiam na tela do celular, então vão em cinza escuro com um contorno
+    // branco fino — o mesmo recurso dos nomes de rua nos mapas, que deixa o
+    // texto legível sobre qualquer fundo.
+    const escreverLegivel = (texto: string, x: number, y: number) => {
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(texto, x, y);
+      ctx.fillText(texto, x, y);
+    };
+
     let alturaDoRotulo = 0;
     if (showRoomLabels && alturaNaTela >= fontSize + 4) {
-      ctx.fillStyle = '#9ca3af';
+      ctx.fillStyle = '#4b5563';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const anchor = roomLabelPosition(room, poly, holes[ri]);
@@ -1540,7 +1553,7 @@ export function drawRooms(
       // para ele, nada é escrito.
       const completo = `${room.name} (${formatArea(room.area, dimSettings.units)})`;
       const texto = cabe(completo) ? completo : cabe(room.name) ? room.name : null;
-      if (texto) { ctx.fillText(texto, label.x, label.y); alturaDoRotulo = fontSize; }
+      if (texto) { escreverLegivel(texto, label.x, label.y); alturaDoRotulo = fontSize; }
     }
 
     // O tamanho escrito no centro do ambiente acompanha as cotas internas, como
@@ -1551,11 +1564,11 @@ export function drawRooms(
       const roomD = (maxY - minY) / 100;
       if (roomW > 0.1 && roomD > 0.1) {
         const dimFontSize = Math.max(9, 10 * zoom);
-        ctx.fillStyle = '#b0b8c4'; ctx.font = `${dimFontSize}px sans-serif`;
+        ctx.fillStyle = '#6b7280'; ctx.font = `${dimFontSize}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         const medidas = `${formatLength(roomW * 100, dimSettings.units)} × ${formatLength(roomD * 100, dimSettings.units)}`;
         if (cabe(medidas) && alturaNaTela >= alturaDoRotulo + dimFontSize + 6) {
-          ctx.fillText(medidas, sc.x, sc.y + alturaDoRotulo + 2);
+          escreverLegivel(medidas, sc.x, sc.y + alturaDoRotulo + 2);
         }
       }
     }

@@ -43,7 +43,7 @@
   import { translatedWallGeometry, wallGeometryOf, type WallGeometry } from '$lib/utils/wallTranslation';
   import { marqueeSelectionIds } from '$lib/utils/marqueeSelection';
   import { isTracingImageType } from '$lib/utils/tracingImage';
-  import { findRoomLabelAt as _findRoomLabelAt, positionOnWall, findWallAt as _findWallAt, findHandleAt as _findHandleAt, findFurnitureAt as _findFurnitureAt, findColumnAt as _findColumnAt, findStairAt as _findStairAt, findDoorAt as _findDoorAt, findWindowAt as _findWindowAt, findRoomAt as _findRoomAt, hitTestMeasurement as _hitTestMeasurement, hitTestAnnotation as _hitTestAnnotation, hitTestTextAnnotation as _hitTestTextAnnotation, findEntourageAt } from '$lib/utils/hitTesting';
+  import { findRoomLabelAt as _findRoomLabelAt, positionOnWall, findWallAt as _findWallAt, findHandleAt as _findHandleAt, findFurnitureAt as _findFurnitureAt, findColumnAt as _findColumnAt, findStairAt as _findStairAt, findDoorAt as _findDoorAt, findWindowAt as _findWindowAt, findRoomAt as _findRoomAt, hitTestMeasurement as _hitTestMeasurement, hitTestAnnotation as _hitTestAnnotation, hitTestTextAnnotation as _hitTestTextAnnotation, findEntourageAt, definirFolgaDeToque } from '$lib/utils/hitTesting';
 
   let canvas: HTMLCanvasElement;
   let ctx: CanvasRenderingContext2D;
@@ -60,6 +60,7 @@
   let rodapeOcupado = $state(0);
   /** Altura medida da barra de status, para o zoom pousar logo acima dela. */
   let alturaBarraStatus = $state(48);
+  let alturaBarraZoom = $state(40);
 
   // Camera
   let camX = $state(0);
@@ -1614,7 +1615,7 @@
     if (wallSequenceFirst && wallStart && currentTool === 'wall' && (wallStart.x !== wallSequenceFirst.x || wallStart.y !== wallSequenceFirst.y)) {
       const fp = worldToScreen(wallSequenceFirst.x, wallSequenceFirst.y);
       const distToFirst = Math.hypot(mousePos.x - wallSequenceFirst.x, mousePos.y - wallSequenceFirst.y);
-      const isNear = distToFirst < 20;
+      const isNear = distToFirst < 20 && previaDeParedeVisivel();
       ctx.beginPath();
       ctx.arc(fp.x, fp.y, isNear ? 8 : 5, 0, Math.PI * 2);
       ctx.strokeStyle = isNear ? '#3b82f6' : '#64748b';
@@ -1625,7 +1626,7 @@
         ctx.fill();
       }
     }
-    if (wallStart && currentTool === 'wall') {
+    if (wallStart && currentTool === 'wall' && previaDeParedeVisivel()) {
       drawAngleGuides(wallStart);
       const endPt = applyTypedWallLength(snapWallEndPoint(mousePos));
       const s = worldToScreen(wallStart.x, wallStart.y);
@@ -2623,26 +2624,9 @@
     }
 
     if (tool === 'wall') {
-      let endPt = snapWallEndPoint(wp);
-      if (wallStart) endPt = applyTypedWallLength(endPt);
-      typedWallLength = '';
-      if (!wallStart) {
-        wallStart = endPt;
-        wallSequenceFirst = endPt;
-        wallSequenceCount = 0;
-      } else {
-        // Auto-close: if clicking near the first point of the sequence, close the loop
-        if (wallSequenceFirst && Math.hypot(endPt.x - wallSequenceFirst.x, endPt.y - wallSequenceFirst.y) < 20 && Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y) > 20) {
-          addWall(wallStart, wallSequenceFirst);
-          wallStart = null;
-          wallSequenceFirst = null;
-          wallSequenceCount = 0;
-        } else if (Math.hypot(endPt.x - wallStart.x, endPt.y - wallStart.y) > 5) {
-          addWall(wallStart, endPt);
-          wallStart = endPt;
-          wallSequenceCount++;
-        }
-      }
+      // No dedo quem fixa o trecho é o levantar do dedo, em onTouchEnd: aqui o
+      // toque só serviria para marcar o ponto duas vezes.
+      if (!dedoTracandoParede) avancarTracadoParede(wp);
     } else if (tool === 'select') {
       if (!e.ctrlKey && !e.metaKey && startMultiSelectionDrag(wp)) return;
       // Check wall endpoint handles first (drag-to-resize walls)
@@ -2975,6 +2959,64 @@
     typedWallLength = '';
     markDirty();
   }
+
+  /**
+   * Leva o traçado um ponto adiante: marca o começo, fecha o contorno quando o
+   * ponto cai sobre o início, ou fixa mais um trecho.
+   *
+   * É o mesmo caminho para o mouse (um clique por ponto) e para o dedo (o ponto
+   * é onde o dedo levanta), então as duas formas de desenhar nunca divergem.
+   */
+  function avancarTracadoParede(wp: Point) {
+    let endPt = snapWallEndPoint(wp);
+    if (wallStart) endPt = applyTypedWallLength(endPt);
+    typedWallLength = '';
+    if (!wallStart) {
+      wallStart = endPt;
+      wallSequenceFirst = endPt;
+      wallSequenceCount = 0;
+      return;
+    }
+    // Fecha o contorno quando o ponto cai sobre o início da sequência.
+    if (wallSequenceFirst
+        && Math.hypot(endPt.x - wallSequenceFirst.x, endPt.y - wallSequenceFirst.y) < 20
+        && Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y) > 20) {
+      addWall(wallStart, wallSequenceFirst);
+      wallStart = null;
+      wallSequenceFirst = null;
+      wallSequenceCount = 0;
+      return;
+    }
+    if (Math.hypot(endPt.x - wallStart.x, endPt.y - wallStart.y) > 5) {
+      addWall(wallStart, endPt);
+      wallStart = endPt;
+      wallSequenceCount++;
+    }
+  }
+
+  /**
+   * A prévia da parede só faz sentido enquanto algo aponta para algum lugar.
+   *
+   * No celular, depois que o dedo levanta não há mais ponteiro: a prévia
+   * congelava no último ponto e enchia a tela de linhas-guia e de uma etiqueta
+   * "0 cm" que não queriam dizer nada.
+   */
+  function previaDeParedeVisivel(): boolean {
+    return !telaDeCelular || dedoTracandoParede;
+  }
+
+  /**
+   * Medida da parede que está sendo puxada agora.
+   *
+   * A etiqueta desenhada sobre a parede fica debaixo da mão de quem desenha com
+   * o dedo, então no celular a mesma medida é repetida no alto da tela.
+   */
+  let medidaEmTracado = $derived.by(() => {
+    if (currentTool !== 'wall' || !wallStart || !previaDeParedeVisivel()) return null;
+    const fim = applyTypedWallLength(snapWallEndPoint(mousePos));
+    const medida = Math.hypot(fim.x - wallStart.x, fim.y - wallStart.y);
+    return medida > 1 ? medida : null;
+  });
 
   /** Encerra o traçado onde está, mantendo as paredes já desenhadas. */
   function terminarTracado() {
@@ -3396,6 +3438,14 @@
   // Listeners are registered manually in onMount with { passive: false }
   // because we must preventDefault to stop scrolling and the browser's
   // compatibility mouse events (which would double-fire the handlers).
+  /* ── Parede puxada com o dedo ────────────────────────────────────────
+     No dedo não existe "passar o mouse": se o trecho só fosse fixado no toque
+     seguinte, a parede puxada ficava pendurada na tela sem pertencer a nada e
+     o botão de confirmar a jogava fora. Então vale o gesto natural — o dedo
+     desce, arrasta e, ao levantar, a parede fica. Um toque seco continua
+     valendo como antes: marca o ponto e o toque seguinte fecha o trecho. */
+  let dedoTracandoParede = $state(false);
+
   let pinchState: { dist: number; cx: number; cy: number } | null = null;
   let singleTouchActive = false;
   let singleTouchOrigin: { clientX: number; clientY: number } | null = null;
@@ -3421,10 +3471,22 @@
       singleTouchActive = true;
       singleTouchOrigin = { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
       singleTouchMoved = false;
+      // Quem toca a tela aponta com o dedo daqui em diante.
+      definirFolgaDeToque(1.8);
+      if (currentTool === 'wall' && !$panMode && !spaceDown) {
+        dedoTracandoParede = true;
+        const rect = canvas.getBoundingClientRect();
+        const wp = screenToWorld(e.touches[0].clientX - rect.left, e.touches[0].clientY - rect.top);
+        // A prévia acompanha o dedo desde o primeiro instante, e não a última
+        // posição de um mouse que no celular não existe.
+        mousePos = wp;
+        if (!wallStart) avancarTracadoParede(wp);
+      }
       dispatchMouse('mousedown', e.touches[0].clientX, e.touches[0].clientY);
     } else if (e.touches.length === 2) {
       lastTapTime = 0;
       singleTouchOrigin = null;
+      dedoTracandoParede = false;
       // Second finger landed: abandon any single-finger drag and start pinching
       if (singleTouchActive) {
         dispatchMouse('mouseup', e.touches[0].clientX, e.touches[0].clientY);
@@ -3472,6 +3534,7 @@
     if (e.type === 'touchcancel') {
       pinchState = null;
       lastTapTime = 0;
+      dedoTracandoParede = false;
       if (singleTouchActive) {
         singleTouchActive = false;
         const touch = e.changedTouches[0] ?? singleTouchOrigin;
@@ -3493,6 +3556,14 @@
       singleTouchOrigin = null;
       if (!t) return;
       dispatchMouse('mouseup', t.clientX, t.clientY);
+      if (dedoTracandoParede) {
+        dedoTracandoParede = false;
+        if (wallStart) {
+          const rect = canvas.getBoundingClientRect();
+          avancarTracadoParede(screenToWorld(t.clientX - rect.left, t.clientY - rect.top));
+          markDirty();
+        }
+      }
       if (singleTouchMoved) { lastTapTime = 0; return; }
       // Synthesize click so document-level click-outside handlers (menus) fire
       dispatchMouse('click', t.clientX, t.clientY);
@@ -4478,12 +4549,12 @@
   {/if}
   {#if currentTool === 'wall' && wallStart}
     {#if telaDeCelular}
+      <!--
+        Os dois botões ficam sempre no mesmo lugar, logo abaixo da barra de
+        cima: quem desenha com o dedo precisa achá-los sem olhar. A medida e o
+        aviso vêm por baixo deles para não empurrar os botões de posição.
+      -->
       <div class="absolute top-2 inset-x-2 z-30 flex flex-col gap-1.5">
-        {#if quaseFechando()}
-          <p role="status" class="self-center rounded-full bg-amber-400 px-3 py-1 text-[11px] font-medium text-amber-950 shadow">
-            {$t('tracadoParede.quaseFechando')}
-          </p>
-        {/if}
         <div class="flex items-stretch gap-1.5 rounded-xl bg-white/95 p-1.5 shadow-lg backdrop-blur">
           <button
             type="button"
@@ -4496,6 +4567,18 @@
             class="min-h-11 flex-1 rounded-lg bg-slate-100 px-2 text-sm font-semibold text-slate-700"
             onclick={terminarTracado}
           >{$t('tracadoParede.terminar')}</button>
+        </div>
+        <div class="flex flex-wrap items-center justify-center gap-1.5">
+          {#if medidaEmTracado !== null}
+            <p class="rounded-full bg-slate-900/90 px-3 py-1 text-sm font-bold tabular-nums text-white shadow">
+              {formatLength(medidaEmTracado, dimSettings.units)}
+            </p>
+          {/if}
+          {#if quaseFechando()}
+            <p role="status" class="rounded-full bg-amber-400 px-3 py-1 text-[11px] font-medium text-amber-950 shadow">
+              {$t('tracadoParede.quaseFechando')}
+            </p>
+          {/if}
         </div>
       </div>
     {:else}
@@ -4526,7 +4609,7 @@
   {/if}
 
   <!-- Zoom Controls (bottom-left) -->
-  <div style:bottom={telaDeCelular ? `${rodapeOcupado + (gavetaAberta ? 8 : alturaBarraStatus + 16)}px` : `${zoomControlsBottom}px`} class="absolute left-3 max-md:left-2 z-20 flex items-center gap-1 bg-white rounded-lg shadow-lg border border-gray-200 px-1 py-0.5">
+  <div bind:clientHeight={alturaBarraZoom} style:bottom={telaDeCelular ? `${rodapeOcupado + (gavetaAberta ? 8 : alturaBarraStatus + 16)}px` : `${zoomControlsBottom}px`} class="absolute left-3 max-md:left-2 z-20 flex items-center gap-1 bg-white rounded-lg shadow-lg border border-gray-200 px-1 py-0.5">
     <button
       class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 font-bold text-lg"
       title={$t('canvasZoom.outHint')}
@@ -4610,7 +4693,9 @@
     <div
       role="status"
       class="absolute left-1/2 z-30 w-[min(22rem,calc(100%-1rem))] -translate-x-1/2 rounded-xl border border-blue-200 bg-white p-3 shadow-xl"
-      style:bottom={telaDeCelular ? 'calc(5.5rem + env(safe-area-inset-bottom, 0px))' : '4.5rem'}
+      style:bottom={telaDeCelular
+        ? `${rodapeOcupado + (gavetaAberta ? 8 : alturaBarraStatus + 16) + alturaBarraZoom + 12}px`
+        : '4.5rem'}
     >
       <p class="text-sm text-slate-700">
         {$t('sugestao.pergunta', { ambiente: $t(sugestao.sugestao.chave as Parameters<typeof $t>[0]) })}

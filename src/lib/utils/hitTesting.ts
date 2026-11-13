@@ -43,13 +43,32 @@ export function positionOnWall(p: Point, w: Wall): number {
   return Math.max(0.1, Math.min(0.9, ((p.x - w.start.x) * dx + (p.y - w.start.y) * dy) / len2));
 }
 
+/*
+ * A ponta do dedo cobre uns 10 mm de tela; a ponta do cursor, um pixel. Os
+ * alvos finos da planta — uma parede de 15 cm vista de longe, a folga de uma
+ * porta — foram medidos para o cursor e ficam pequenos demais para o dedo.
+ * Então, quando quem aponta é um dedo, a faixa sensível cresce; a regra de qual
+ * elemento ganha continua a mesma, é só alcance.
+ */
+let folgaDeToque = 1;
+
+/** Liga a folga do dedo. Fator 1 volta às medidas do cursor. */
+export function definirFolgaDeToque(fator: number) {
+  folgaDeToque = Number.isFinite(fator) && fator > 1 ? fator : 1;
+}
+
+/** Quanto os alvos finos crescem agora. */
+export function folgaDeToqueAtual(): number {
+  return folgaDeToque;
+}
+
 /**
  * Nearest wall within a 15px screen-space band of its painted body. Walls are
  * ranked by the distance from the body edge (thickness/2 around the centreline,
  * negative inside), so a click on a thick wall beats a nearer thin centreline.
  */
 export function findWallAt(p: Point, walls: Wall[], zoom: number): Wall | null {
-  const threshold = 15 / zoom;
+  const threshold = (15 * folgaDeToque) / zoom;
   let nearest: Wall | null = null, best = threshold;
   for (const w of walls) {
     let distance: number;
@@ -163,7 +182,7 @@ function hitsOpening(p: Point, opening: Door | Win, wall: Wall, zoom: number): b
   const dx = p.x - center.x, dy = p.y - center.y;
   const along = dx * tangent.x + dy * tangent.y;
   const across = -dx * tangent.y + dy * tangent.x;
-  const margin = 5 / zoom;
+  const margin = (5 * folgaDeToque) / zoom;
   return Math.abs(along) <= opening.width / 2 + margin
     && Math.abs(across) <= Math.max(wall.thickness, 4 / zoom) / 2 + margin;
 }

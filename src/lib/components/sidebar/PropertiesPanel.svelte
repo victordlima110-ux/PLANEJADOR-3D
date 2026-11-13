@@ -362,6 +362,95 @@
     { label: '🧶 Carpet', ids: ['carpet-beige', 'carpet-gray'] },
   ];
 
+  /* ── Gaveta curta no celular ──────────────────────────────────────────
+     O painel inteiro cobria metade da tela do aparelho: a pessoa selecionava
+     uma parede e perdia de vista a planta que estava editando. Então no
+     celular ele começa como uma faixa de uma linha, com o nome do que está
+     selecionado e a medida que quase sempre é a razão de ter tocado nele. O
+     painel completo continua a um toque de distância, em "Mais". */
+  let gavetaExpandida = $state(false);
+  $effect(() => { void selId; void selRoomId; gavetaExpandida = false; });
+  let mostrarDetalhes = $derived(!$telaPequena || gavetaExpandida);
+
+  /**
+   * Na faixa curta o título divide a linha com a medida e três botões, então
+   * "Propriedades da parede" virava "Propriedades da par...". O nome curto diz
+   * a mesma coisa e deixa espaço para o que a pessoa foi fazer ali.
+   */
+  let tituloSelecao = $derived(
+    selectedWall ? $t('barraCelular.parede')
+    : selectedDoor ? $t('barraCelular.porta')
+    : selectedWindow ? $t('barraCelular.janela')
+    : selectedFurniture ? (customModelName(selectedFurniture, $currentProject)
+        ?? (getCatalogItem(selectedFurniture.catalogId)
+          ? furnitureName(selectedFurniture.catalogId, $locale)
+          : $t('furnitureProperties.fallback')))
+    : selectedRoom ? (selectedRoom.name || $t('roomProperties.heading'))
+    : selectedEntourage ? $t('entourageLabels.title')
+    : selectedStair ? $t('stairProperties.heading')
+    : selectedColumn ? $t('columnProperties.heading')
+    : selectedTextAnnotation ? $t('annotationProperties.heading')
+    : $t('backgroundProperties.heading'),
+  );
+
+  /**
+   * A medida que a faixa curta deixa ao alcance do dedo.
+   *
+   * É sempre a medida que a pessoa foi buscar ao tocar no elemento: o
+   * comprimento da parede, a largura do vão, a largura da escada. Para o que
+   * não tem uma medida assim (móvel, ambiente, texto) a faixa mostra só o nome
+   * e o botão "Mais".
+   */
+  let medidaRapida = $derived.by((): { valor: number; minimo: number; passo: number; aplicar: (cm: number) => void } | null => {
+    if (selectedWall) {
+      const parede = selectedWall;
+      return {
+        valor: calcWallLength(parede), minimo: MIN_WALL_LENGTH, passo: 10,
+        aplicar: (cm) => { wallLengthError = resizeWallLength(parede.id, cm, fixedEndpoint); },
+      };
+    }
+    if (selectedDoor) {
+      const porta = selectedDoor;
+      return { valor: porta.width, minimo: 10, passo: 5, aplicar: (cm) => updateDoor(porta.id, { width: cm }) };
+    }
+    if (selectedWindow) {
+      const janela = selectedWindow;
+      return { valor: janela.width, minimo: 10, passo: 5, aplicar: (cm) => updateWindow(janela.id, { width: cm }) };
+    }
+    if (selectedStair) {
+      const escada = selectedStair;
+      return { valor: escada.width, minimo: 30, passo: 5, aplicar: (cm) => updateStair(escada.id, { width: cm }) };
+    }
+    if (selectedColumn) {
+      const pilar = selectedColumn;
+      return { valor: pilar.diameter, minimo: 5, passo: 5, aplicar: (cm) => updateColumn(pilar.id, { diameter: cm }) };
+    }
+    return null;
+  });
+
+  /** Um toque no + ou no − anda uma medida redonda, sem abrir teclado. */
+  function andarMedida(sinal: 1 | -1) {
+    const medida = medidaRapida;
+    if (!medida) return;
+    const alvo = Math.max(medida.minimo, Math.round((medida.valor + sinal * medida.passo) / medida.passo) * medida.passo);
+    if (alvo !== Math.round(medida.valor)) medida.aplicar(alvo);
+  }
+
+  function editarMedidaRapida(e: Event) {
+    const medida = medidaRapida;
+    const input = e.target as HTMLInputElement;
+    if (!medida) return;
+    const lido = parseLengthInput(input.value, settings.units);
+    if (lido !== null && lido >= medida.minimo) medida.aplicar(lido);
+    input.value = String(displayValue(medidaRapida?.valor ?? medida.valor));
+  }
+
+  function limparSelecao() {
+    selectedElementId.set(null);
+    selectedElementIds.set(new Set());
+    selectedRoomId.set(null);
+  }
+
   let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || (!is3D && hasBgImage));
 </script>
 
@@ -376,23 +465,82 @@
 -->
 <div
   data-plan-properties
-  class="{is3D ? 'w-80' : 'w-64'} shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-y-auto p-3 fixed md:static right-0 top-12 bottom-9 z-40 shadow-lg max-md:top-auto max-md:left-0 max-md:w-full max-md:max-h-[42vh] max-md:border-l-0 max-md:border-t max-md:rounded-t-xl max-md:shadow-2xl max-md:pt-0"
+  class="{is3D ? 'w-80' : 'w-64'} shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-y-auto p-3 fixed md:static right-0 top-12 bottom-9 z-40 shadow-lg max-md:top-auto max-md:left-0 max-md:w-full max-md:border-l-0 max-md:border-t max-md:rounded-t-xl max-md:shadow-2xl max-md:pt-0"
+  class:max-md:max-h-[70vh]={gavetaExpandida}
+  class:max-md:overflow-hidden={!gavetaExpandida}
+  class:max-md:py-1={!gavetaExpandida}
   style:bottom={$telaPequena ? 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' : undefined}
   class:hidden={!hasSelection}
 >
   {#if $telaPequena}
-    <div class="sticky top-0 -mx-3 mb-2 flex items-center justify-between gap-2 border-b border-gray-100 bg-white px-3 py-2">
-      <span class="h-1 w-10 rounded-full bg-gray-200" aria-hidden="true"></span>
-      <button
-        type="button"
-        class="-mr-1 flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 active:bg-gray-100 active:text-gray-700"
-        aria-label={$t('propriedades.fechar')}
-        onclick={() => { selectedElementId.set(null); selectedElementIds.set(new Set()); selectedRoomId.set(null); }}
-      >
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
+    {#if gavetaExpandida}
+      <div class="sticky top-0 -mx-3 mb-2 flex items-center justify-between gap-2 border-b border-gray-100 bg-white px-3 py-2">
+        <button
+          type="button"
+          class="flex h-10 items-center gap-1 rounded-lg px-2 text-xs font-medium text-gray-500 active:bg-gray-100"
+          onclick={() => (gavetaExpandida = false)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+          {$t('propriedades.recolher')}
+        </button>
+        <button
+          type="button"
+          class="-mr-1 flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 active:bg-gray-100 active:text-gray-700"
+          aria-label={$t('propriedades.fechar')}
+          onclick={limparSelecao}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    {:else}
+      <!--
+        A faixa curta: nome, a medida principal com − e + do tamanho do dedo, e
+        as duas saídas. Ocupa uma linha, não metade da tela.
+      -->
+      <div class="flex items-center gap-1">
+        <span class="min-w-0 flex-1 truncate text-xs font-semibold text-gray-700">{tituloSelecao}</span>
+        {#if medidaRapida}
+          <button
+            type="button"
+            class="flex h-10 w-9 items-center justify-center rounded-lg border border-gray-200 text-lg leading-none text-gray-600 active:bg-gray-100"
+            aria-label={$t('propriedades.diminuir')}
+            onclick={() => andarMedida(-1)}
+          >−</button>
+          <input
+            type="text"
+            inputmode="decimal"
+            aria-label="{tituloSelecao} — {$t('propriedades.medida')} ({unitLabel()})"
+            value={displayValue(medidaRapida.valor)}
+            onblur={editarMedidaRapida}
+            onkeydown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+            class="h-10 w-14 rounded-lg border border-gray-200 text-center text-sm tabular-nums"
+          />
+          <span class="text-[10px] text-gray-400">{unitLabel()}</span>
+          <button
+            type="button"
+            class="flex h-10 w-9 items-center justify-center rounded-lg border border-gray-200 text-lg leading-none text-gray-600 active:bg-gray-100"
+            aria-label={$t('propriedades.aumentar')}
+            onclick={() => andarMedida(1)}
+          >+</button>
+        {/if}
+        <button
+          type="button"
+          class="flex h-10 items-center rounded-lg px-2 text-xs font-medium text-blue-700 active:bg-blue-50"
+          onclick={() => (gavetaExpandida = true)}
+        >{$t('propriedades.mais')}</button>
+        <button
+          type="button"
+          class="flex h-10 w-9 items-center justify-center rounded-lg text-gray-400 active:bg-gray-100 active:text-gray-700"
+          aria-label={$t('propriedades.fechar')}
+          onclick={limparSelecao}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      {#if wallLengthError}<p role="alert" class="mt-1 text-[11px] text-red-700">{wallLengthError}</p>{/if}
+    {/if}
   {/if}
+  {#if mostrarDetalhes}
   {#if selectedWall}
     <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
       <span class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center text-xs">▭</span>
@@ -1132,5 +1280,6 @@
         >{$t('backgroundProperties.remove')}</button>
       </div>
     </div>
+  {/if}
   {/if}
 </div>

@@ -1,30 +1,28 @@
-ATUALIZACAO - correcoes encontradas testando o programa como usuario
-====================================================================
+ATUALIZACAO - usando o programa com o dedo, no celular
+======================================================
 
 Arraste as pastas "src" e "tests" para dentro do seu repositorio no
-GitHub (na raiz, onde ja existem essas duas pastas). O GitHub pergunta
-se quer substituir os arquivos existentes: confirme.
+GitHub (na raiz, onde ja existem essas duas pastas) e confirme a
+substituicao dos arquivos.
 
-Nenhum arquivo precisa ser apagado. Nao mexe em package.json nem em
-configuracao: o Vercel vai publicar sozinho depois do commit.
+APAGUE TAMBEM estes dois arquivos, que testam uma funcao de IA que ja
+foi retirada do programa e por isso falham sempre:
 
-Arquivos nesta atualizacao (18):
+  tests/browser/ai-panel-localization.spec.ts
+  tests/browser/ai-provider.spec.ts
+
+No GitHub: abra cada um, clique nos tres pontinhos (...) no canto
+direito e escolha "Delete file".
+
+Arquivos nesta atualizacao (10):
 
 src/lib/components/editor/FloorPlanCanvas.svelte
-src/lib/components/editor/BarraFerramentasCelular.svelte
-src/lib/components/sidebar/BuildPanel.svelte
 src/lib/components/sidebar/PropertiesPanel.svelte
-src/lib/components/LoteFormulario.svelte
-src/lib/components/toolbar/TopBar.svelte
-src/lib/components/viewer3d/ThreeViewer.svelte
+src/lib/utils/hitTesting.ts
 src/lib/utils/canvasRenderer.ts
-src/lib/utils/roomDetection.ts
-src/lib/stores/settings.ts
-src/lib/stores/abaDoPainel.ts        (novo)
 src/lib/i18n/locales/pt.ts
 src/lib/i18n/locales/origem.ts
-tests/rotulo-ambiente.test.ts        (novo)
-tests/rooms.test.ts
-tests/overlapping-rooms.test.ts
-tests/exports.test.ts
-tests/export-visibility.test.ts
+tests/folga-de-toque.test.ts          (novo)
+tests/rotulo-ambiente.test.ts
+tests/browser/automatic-dimension-fit.spec.ts
+tests/browser/toolbar-view-localization.spec.ts

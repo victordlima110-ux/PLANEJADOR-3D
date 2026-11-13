@@ -6,7 +6,7 @@ for (const width of [390, 1440]) test(`Portuguese view controls at ${width}px pr
   await page.goto('/editor');
   if (width === 390) {
     await page.getByRole('button', { name: 'Mais ações', exact: true }).click();
-    const pan = page.getByRole('button', { name: /Modo de deslocamento/ });
+    const pan = page.getByRole('button', { name: /Mover a planta/ });
     const before = await pan.textContent();
     await pan.click();
     await expect(pan).not.toHaveText(before!);
