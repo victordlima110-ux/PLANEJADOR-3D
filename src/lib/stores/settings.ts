@@ -17,7 +17,7 @@ export interface ProjectSettings {
   gridSize: number;                      // grid snap size in cm (default 25)
 }
 
-const defaultSettings: ProjectSettings = {
+export const defaultSettings: ProjectSettings = {
   units: 'metric',
   showDimensions: true,
   showExternalDimensions: true,

@@ -1,4 +1,9 @@
 <script lang="ts">
+  import { abaDoPainel, type AbaDoPainel } from '$lib/stores/abaDoPainel';
+  import LoteFormulario from '$lib/components/LoteFormulario.svelte';
+  import { areaDoLote } from '$lib/utils/lote';
+  import { telaPequena } from '$lib/stores/telaPequena';
+  import { definirLote, loteDoProjeto } from '$lib/stores/project';
   import { furnitureName } from '$lib/i18n/furnitureNames';
   import { t, locale } from '$lib/i18n';
   import { entourageLabels } from '$lib/i18n/entourageLabels';
@@ -12,69 +17,7 @@
   import { activateMeasurementTool, selectedTool, placingFurnitureId, placingDoorType, placingWindowType, placingStair, addStair, placingColumn, placingColumnShape, activeFloor, setBackgroundImage, canvasCamX, canvasCamY, placingEntourageId, addCustomEntourage, beginUndoGroup, endUndoGroup, addAnnotation, removeAnnotation, addTextAnnotation, removeTextAnnotation, addWall, updateWall } from '$lib/stores/project';
 
   let showLotPanel = $state(false);
-  let lotWidthM = $state(12);
-  let lotDepthM = $state(30);
-  let lotStreetSide = $state<'top' | 'bottom'>('top');
-  let lotWalls3D = $state(false);
 
-  function clearLotDemarcation() {
-    const floor = get(activeFloor);
-    if (!floor) return;
-    for (const a of [...(floor.annotations ?? [])]) {
-      if (a.label?.startsWith('[LOTE]')) removeAnnotation(a.id);
-    }
-    for (const t of [...(floor.textAnnotations ?? [])]) {
-      if (t.text?.startsWith('[LOTE]')) removeTextAnnotation(t.id);
-    }
-  }
-
-  function applyLotDemarcation() {
-    const floor = get(activeFloor);
-    if (!floor) return;
-    const wCm = Math.max(100, Math.round(lotWidthM * 100));
-    const dCm = Math.max(100, Math.round(lotDepthM * 100));
-
-    let cx = get(canvasCamX), cy = get(canvasCamY);
-    if (floor.walls.length > 0) {
-      const xs = floor.walls.flatMap(w => [w.start.x, w.end.x]);
-      const ys = floor.walls.flatMap(w => [w.start.y, w.end.y]);
-      cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-      cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-    }
-
-    const left = Math.round((cx - wCm / 2) / 10) * 10;
-    const right = left + wCm;
-    const top = Math.round((cy - dCm / 2) / 10) * 10;
-    const bottom = top + dCm;
-    const frontAtTop = lotStreetSide === 'top';
-
-    beginUndoGroup();
-    try {
-      clearLotDemarcation();
-      addAnnotation(left, top, right, top, 30, frontAtTop ? `[LOTE] Frente: ${lotWidthM}m` : `[LOTE] Fundo: ${lotWidthM}m`);
-      addAnnotation(left, bottom, right, bottom, 30, frontAtTop ? `[LOTE] Fundo: ${lotWidthM}m` : `[LOTE] Frente: ${lotWidthM}m`);
-      addAnnotation(left, top, left, bottom, 30, `[LOTE] Lateral Esq.: ${lotDepthM}m`);
-      addAnnotation(right, top, right, bottom, 30, `[LOTE] Lateral Dir.: ${lotDepthM}m`);
-
-      const streetY = frontAtTop ? top - 120 : bottom + 120;
-      const backY = frontAtTop ? bottom + 100 : top - 100;
-      addTextAnnotation(cx, streetY, `[LOTE] RUA / CALÇADA — FRENTE DO LOTE (${lotWidthM}m × ${lotDepthM}m)`, 20, '#1d4ed8', 0);
-      addTextAnnotation(cx, backY, `[LOTE] FUNDO DO TERRENO (DIVISA)`, 15, '#64748b', 0);
-
-      if (lotWalls3D) {
-        const wLeft = addWall({ x: left, y: top }, { x: left, y: bottom });
-        const wRight = addWall({ x: right, y: top }, { x: right, y: bottom });
-        const wBack = frontAtTop
-          ? addWall({ x: left, y: bottom }, { x: right, y: bottom })
-          : addWall({ x: left, y: top }, { x: right, y: top });
-        for (const id of [wLeft, wRight, wBack]) {
-          updateWall(id, { height: 200, startHeight: 200, endHeight: 200, thickness: 15, color: '#94a3b8' });
-        }
-      }
-    } finally {
-      endUndoGroup('Site outline');
-    }
-  }
   import type { Tool } from '$lib/stores/project';
   import { toggleColumnPlacement, toggleStairPlacement } from '$lib/utils/placementArming';
   import type { Door, Window as Win, CustomEntourageDef } from '$lib/models/types';
@@ -98,7 +41,11 @@
   let unsupportedImage = $state(false);
 
   // AreaSummaryPanel moved to top bar dialog
-  let activeTab = $state<'draw' | 'rooms' | 'objects'>('draw');
+  // A aba vive numa store: a barra de baixo do celular precisa abrir o painel
+  // já em OBJETOS quando a pessoa toca em "Móveis".
+  let activeTab = $state<AbaDoPainel>('draw');
+  onDestroy(abaDoPainel.subscribe((valor) => { activeTab = valor; }));
+  const trocarAba = (valor: AbaDoPainel) => abaDoPainel.set(valor);
   let constructionOpen = $state(true);
   let selectedCategory = $state<string>('All');
   // RoomPlan import dialog state
@@ -464,15 +411,15 @@
   <div class="flex border-b border-gray-200 items-center">
     <button
       class="flex-1 min-w-0 truncate px-1 py-3 text-[11px] font-semibold uppercase tracking-wide {activeTab === 'draw' ? 'text-slate-800 border-b-2 border-blue-500 bg-blue-50' : 'text-gray-500 hover:text-gray-700'}"
-      onclick={() => activeTab = 'draw'}
+      onclick={() => trocarAba('draw')}
     >{$t('buildTools.build')}</button>
     <button
       class="flex-1 min-w-0 truncate px-1 py-3 text-[11px] font-semibold uppercase tracking-wide {activeTab === 'rooms' ? 'text-slate-800 border-b-2 border-blue-500 bg-blue-50' : 'text-gray-500 hover:text-gray-700'}"
-      onclick={() => activeTab = 'rooms'}
+      onclick={() => trocarAba('rooms')}
     >{$t('buildTools.rooms')}</button>
     <button
       class="flex-1 min-w-0 truncate px-1 py-3 text-[11px] font-semibold uppercase tracking-wide {activeTab === 'objects' ? 'text-slate-800 border-b-2 border-blue-500 bg-blue-50' : 'text-gray-500 hover:text-gray-700'}"
-      onclick={() => activeTab = 'objects'}
+      onclick={() => trocarAba('objects')}
     >{$t('buildTools.objects')}</button>
     {#if celular}
       <button
@@ -486,45 +433,29 @@
   <div class="flex-1 overflow-y-auto p-3">
     {#if activeTab === 'draw'}
       <div class="space-y-1">
-        <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2">Terreno / Lote</h3>
+        <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2">{$t('lote.titulo')}</h3>
         <button
-          class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100 transition-colors mb-2"
+          class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100 transition-colors mb-2"
           onclick={() => showLotPanel = !showLotPanel}
         >
-          <span class="font-medium">📐 Demarcar Terreno e Rua</span>
+          <span class="font-medium text-left">
+            {#if $loteDoProjeto}
+              {$t('lote.area', { area: areaDoLote($loteDoProjeto).toFixed(0) })}
+            {:else}
+              {$t('lote.definir')}
+            {/if}
+          </span>
           <span class="text-xs">{showLotPanel ? '▲' : '▼'}</span>
         </button>
 
         {#if showLotPanel}
-          <div class="p-3 mb-3 rounded-lg border border-blue-200 bg-gray-50 space-y-2.5 text-xs">
-            <div class="flex flex-wrap gap-1">
-              <button class="px-2 py-1 rounded bg-white border border-gray-200 hover:border-blue-400" onclick={() => { lotWidthM = 10; lotDepthM = 20; }}>10×20m</button>
-              <button class="px-2 py-1 rounded bg-white border border-gray-200 hover:border-blue-400" onclick={() => { lotWidthM = 10; lotDepthM = 25; }}>10×25m</button>
-              <button class="px-2 py-1 rounded bg-white border border-gray-200 hover:border-blue-400" onclick={() => { lotWidthM = 12; lotDepthM = 30; }}>12×30m</button>
-              <button class="px-2 py-1 rounded bg-white border border-gray-200 hover:border-blue-400" onclick={() => { lotWidthM = 15; lotDepthM = 30; }}>15×30m</button>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
-              <label class="block text-gray-600">Frente (m)
-                <input type="number" min="3" max="200" step="0.5" bind:value={lotWidthM} class="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm bg-white" />
-              </label>
-              <label class="block text-gray-600">Lateral (m)
-                <input type="number" min="5" max="500" step="0.5" bind:value={lotDepthM} class="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-sm bg-white" />
-              </label>
-            </div>
-            <label class="block text-gray-600">Posição da Rua (Frente da Casa)
-              <select bind:value={lotStreetSide} class="mt-0.5 w-full rounded border border-gray-300 px-2 py-1 text-xs bg-white">
-                <option value="top">Rua na parte de cima da planta</option>
-                <option value="bottom">Rua na parte de baixo da planta</option>
-              </select>
-            </label>
-            <label class="flex items-center gap-2 text-gray-700 cursor-pointer">
-              <input type="checkbox" bind:checked={lotWalls3D} class="accent-blue-600" />
-              <span>Criar muros de divisa em 3D (2,00m)</span>
-            </label>
-            <div class="flex gap-1.5 pt-1">
-              <button onclick={applyLotDemarcation} class="flex-1 py-1.5 bg-blue-600 text-white rounded font-medium hover:bg-blue-700">Aplicar no Lote</button>
-              <button onclick={clearLotDemarcation} class="px-2 py-1.5 border border-gray-300 bg-white text-gray-600 rounded hover:bg-gray-100">Limpar</button>
-            </div>
+          <div class="p-3 mb-3 rounded-lg border border-emerald-200 bg-gray-50">
+            <LoteFormulario
+              inicial={$loteDoProjeto ?? null}
+              aoConfirmar={(lote) => { definirLote(lote); showLotPanel = false; }}
+              aoPular={() => { definirLote(null); showLotPanel = false; }}
+              rotuloPular={$loteDoProjeto ? $t('lote.remover') : $t('lote.pular')}
+            />
           </div>
         {/if}
 
@@ -550,7 +481,7 @@
           </div>
           <div class="text-left">
             <div class="font-medium">{$t('buildTools.wall')} <span class="atalho-teclado text-gray-400 text-xs ml-1">W</span></div>
-            <div class="text-xs text-gray-400">{$t('buildTools.wallHelp')}</div>
+            <div class="text-xs text-gray-400">{$t($telaPequena ? 'buildTools.wallHelpToque' : 'buildTools.wallHelp')}</div>
           </div>
         </button>
 

@@ -337,6 +337,7 @@
     href={base || '/'}
     class="flex items-center gap-1 text-white/70 hover:text-white text-sm transition-colors"
     title={$t('projectToolbar.back')}
+    aria-label={$t('projectToolbar.back')}
   >
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
     <span class="hidden sm:inline">{$t('projectToolbar.projects')}</span>

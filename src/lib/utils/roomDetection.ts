@@ -300,7 +300,7 @@ function detectSplitRooms(splitEdges: Edge[]): RoomFace[] {
       polygons.push(poly);
       rooms.push({
         id: `room-${roomCount}-${Date.now()}`,
-        name: `Room ${roomCount}`,
+        name: `Ambiente ${roomCount}`,
         walls: uniqueWalls,
         floorTexture: 'hardwood',
         area: Math.round(area / 10000 * 100) / 100, // cm² to m²

@@ -1859,7 +1859,7 @@
     </div>
   {/if}
   <!-- 3D Toolbar Row -->
-  <div class="absolute top-4 right-4 z-50 flex gap-1.5 max-md:left-2 max-md:right-2 max-md:overflow-x-auto max-md:justify-end max-md:[&>*]:shrink-0 max-md:pb-1">
+  <div class="absolute top-4 right-4 z-50 flex gap-1.5 max-md:left-2 max-md:right-2 max-md:overflow-x-auto max-md:justify-start max-md:[&>*]:shrink-0 max-md:[&>button]:flex max-md:[&>button]:flex-col max-md:[&>button]:items-center max-md:[&>button]:min-w-14 max-md:pb-1">
     <!-- Multi-Floor Stacking Toggle -->
     <button
       onclick={() => { showAllFloors = !showAllFloors; rebuildScene(); }}
@@ -1872,6 +1872,7 @@
         <rect x="4" y="8" width="16" height="4" rx="1" opacity="0.6"/>
         <rect x="4" y="2" width="16" height="4" rx="1" opacity="0.3"/>
       </svg>
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.pavimentos')}</span>
     </button>
 
     <!-- Top-Down View Button -->
@@ -1888,6 +1889,7 @@
         <line x1="2" y1="12" x2="6" y2="12"/>
         <line x1="18" y1="12" x2="22" y2="12"/>
       </svg>
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.deCima')}</span>
     </button>
 
     <!-- Wall Transparency Toggle -->
@@ -1902,6 +1904,7 @@
         <line x1="3" y1="12" x2="21" y2="12"/>
         <line x1="12" y1="3" x2="12" y2="21"/>
       </svg>
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.paredes')}</span>
     </button>
 
     <!-- Edit Mode Toggle -->
@@ -1915,6 +1918,7 @@
         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
       </svg>
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.editar')}</span>
     </button>
 
     <!-- Interior Camera Button -->
@@ -1938,6 +1942,7 @@
         <path d="M23 7l-7 5 7 5V7z"/>
         <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
       </svg>
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.camera')}</span>
     </button>
 
     <!-- 3D Screenshot Button -->
@@ -1951,6 +1956,7 @@
         <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
         <circle cx="12" cy="13" r="4"/>
       </svg>
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.foto')}</span>
     </button>
 
     <!-- Walkthrough Mode Toggle Button -->
@@ -1976,6 +1982,7 @@
         <path d="M10 14l2-2 1 2"/>
       </svg>
     {/if}
+      <span class="md:hidden mt-0.5 block text-[10px] leading-none">{$t('viewer3dCurto.passeio')}</span>
     </button>
   </div><!-- end 3D toolbar row -->
 

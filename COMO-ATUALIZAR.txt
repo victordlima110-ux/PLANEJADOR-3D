@@ -1,0 +1,30 @@
+ATUALIZACAO - correcoes encontradas testando o programa como usuario
+====================================================================
+
+Arraste as pastas "src" e "tests" para dentro do seu repositorio no
+GitHub (na raiz, onde ja existem essas duas pastas). O GitHub pergunta
+se quer substituir os arquivos existentes: confirme.
+
+Nenhum arquivo precisa ser apagado. Nao mexe em package.json nem em
+configuracao: o Vercel vai publicar sozinho depois do commit.
+
+Arquivos nesta atualizacao (18):
+
+src/lib/components/editor/FloorPlanCanvas.svelte
+src/lib/components/editor/BarraFerramentasCelular.svelte
+src/lib/components/sidebar/BuildPanel.svelte
+src/lib/components/sidebar/PropertiesPanel.svelte
+src/lib/components/LoteFormulario.svelte
+src/lib/components/toolbar/TopBar.svelte
+src/lib/components/viewer3d/ThreeViewer.svelte
+src/lib/utils/canvasRenderer.ts
+src/lib/utils/roomDetection.ts
+src/lib/stores/settings.ts
+src/lib/stores/abaDoPainel.ts        (novo)
+src/lib/i18n/locales/pt.ts
+src/lib/i18n/locales/origem.ts
+tests/rotulo-ambiente.test.ts        (novo)
+tests/rooms.test.ts
+tests/overlapping-rooms.test.ts
+tests/exports.test.ts
+tests/export-visibility.test.ts

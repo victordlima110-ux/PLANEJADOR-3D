@@ -79,7 +79,7 @@ it('writes the saved room name into a real SVG download with XML escaping', asyn
   expect(downloaded).toHaveLength(1);
   const svg = await downloaded[0].text();
   expect(svg).toContain('Kitchen &amp; Dining &lt;East&gt;');
-  expect(svg).not.toContain('Room 1');
+  expect(svg).not.toContain('Ambiente 1');
 });
 
 it('writes the saved room name into a real DXF download', async () => {
@@ -87,7 +87,7 @@ it('writes the saved room name into a real DXF download', async () => {
   expect(downloaded).toHaveLength(1);
   const dxf = await downloaded[0].text();
   expect(dxf).toContain('Kitchen & Dining <East>');
-  expect(dxf).not.toContain('Room 1');
+  expect(dxf).not.toContain('Ambiente 1');
 });
 
 it('exports DWG as a DXF download and reports whether anything was written', async () => {
@@ -137,7 +137,7 @@ it('uses saved names and distinct textures for same-name rooms in the PDF schedu
   expect(text.filter(value => value === 'Bedroom')).toHaveLength(2);
   expect(text).toContain('carpet');
   expect(text).toContain('tile');
-  expect(text).not.toContain('Room 1');
+  expect(text).not.toContain('Ambiente 1');
   expect(pdfSave).toHaveBeenCalledOnce();
 });
 

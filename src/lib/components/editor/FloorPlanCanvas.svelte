@@ -56,6 +56,10 @@
   let width = $state(800);
   let height = $state(600);
   let zoomControlsBottom = $state(12);
+  /** Altura, em pixels de tela, do que ocupa o rodapé no celular (ver updateZoomControlsPosition). */
+  let rodapeOcupado = $state(0);
+  /** Altura medida da barra de status, para o zoom pousar logo acima dela. */
+  let alturaBarraStatus = $state(48);
 
   // Camera
   let camX = $state(0);
@@ -80,6 +84,13 @@
   // Digits typed while drawing a wall — Enter places the wall at exactly this length (issue #6)
   let typedWallLength = $state('');
   let wallSequenceFirst: Point | null = $state(null);
+  /**
+   * Trechos já desenhados no contorno em andamento.
+   *
+   * Com um trecho só não há ambiente para fechar: ligar a ponta ao começo
+   * devolveria duas paredes sobrepostas, sem área nenhuma. Daí o contador.
+   */
+  let wallSequenceCount = $state(0);
   let mousePos: Point = $state({ x: 0, y: 0 });
 
   // Inline room name editing
@@ -209,6 +220,14 @@
   // Store subscriptions
   let currentFloor: Floor | null = $state(null);
   let currentSelectedId: string | null = $state(null);
+  /**
+   * A gaveta de propriedades está aberta no celular.
+   *
+   * Enquanto ela ocupa metade da tela, a barra de status sai de cena: o que
+   * importa naquele momento é o elemento selecionado, e as duas juntas não
+   * deixam planta nenhuma à mostra.
+   */
+  let gavetaAberta = $derived(telaDeCelular && !!currentSelectedId);
   let currentSelectedRoomId: string | null = $state(null);
   let currentPlacingId: string | null = $state(null);
   let currentPlacingRotation: number = $state(0);
@@ -1886,7 +1905,14 @@
         if (!mounted || initialFitDone) return;
         // An image-only active floor takes priority over the floor below once loaded.
         if (backgroundLoading && currentFloor && !boundsForFloor(currentFloor)) return;
-        if (!getFitBounds()) return;
+        // Num projeto vazio, o primeiro conteúdo é a primeira parede que a pessoa
+        // desenha — enquadrar ali moveria a planta debaixo do dedo, no meio do
+        // traçado, e o toque seguinte cairia noutro lugar. A partir do momento
+        // em que ela desenha, o enquadramento automático sai de cena de vez:
+        // reenquadrar depois seria o mesmo susto, só mais tarde. O botão
+        // Enquadrar continua à disposição quando ela quiser.
+        if (wallStart || measureStart || annotationStart) { initialFitDone = true; return; }
+        if (!getFitBounds()) { zoom = zoomDePlantaVazia(); markDirty(); return; }
         initialFitDone = true;
         zoomToFit();
       });
@@ -1906,6 +1932,7 @@
         editingDimensionId = null;
         wallStart = null;
         wallSequenceFirst = null;
+        wallSequenceCount = 0;
         typedWallLength = '';
       }
       currentFloor = f;
@@ -1940,6 +1967,7 @@
         editingDimensionId = null;
         wallStart = null;
         wallSequenceFirst = null;
+        wallSequenceCount = 0;
         typedWallLength = '';
       }
       currentTool = t;
@@ -2143,6 +2171,19 @@
   function updateZoomControlsPosition() {
     const visibleHeight = visibleCanvasHeight();
     zoomControlsBottom = 12 + (height-visibleHeight) * canvas.getBoundingClientRect().height / Math.max(1,height);
+    if (typeof window === 'undefined') return;
+    // No celular há barra de ferramentas embaixo e, às vezes, a gaveta de
+    // propriedades por cima dela. Medir o que realmente ocupa o rodapé é a
+    // única forma de os controles pararem logo acima — um valor fixo os
+    // deixava flutuando no meio da planta sempre que a gaveta abria.
+    const ocupadoPor = (seletor: string) => {
+      const el = document.querySelector<HTMLElement>(seletor);
+      if (!el) return 0;
+      const r = el.getBoundingClientRect();
+      if (r.height <= 0 || r.width <= 0) return 0;
+      return Math.max(0, window.innerHeight - r.top);
+    };
+    rodapeOcupado = Math.max(ocupadoPor('[data-barra-celular]'), ocupadoPor('[data-plan-properties]'));
   }
 
   function clearAuxiliarySelection() {
@@ -2199,13 +2240,29 @@
     return ids;
   }
 
+  /**
+   * Zoom de partida quando ainda não há nada desenhado.
+   *
+   * A 100% cabem 3,9 m na largura de um celular — menos que um quarto de
+   * casal, de modo que a pessoa desenharia a primeira parede já saindo da
+   * tela. Partindo de uma largura de uns 12 m, uma casa inteira cabe à vista.
+   * No computador, onde 100% já mostra o bastante, nada muda.
+   */
+  const LARGURA_CONFORTAVEL_CM = 1200;
+  function zoomDePlantaVazia(): number {
+    if (!width || !canvas) return 1;
+    const larguraEmTela = canvas.getBoundingClientRect().width;
+    if (!larguraEmTela) return 1;
+    return Math.min(1, Math.max(0.1, larguraEmTela / LARGURA_CONFORTAVEL_CM));
+  }
+
   function zoomToFit(selectionOnly = false) {
     const ids = fitSelectionIds();
     const boundsAt = (scale = 1) => selectionOnly
       ? (currentFloor ? boundsForFloor(currentFloor,scale,ids) : null) : getFitBounds(scale);
     const bounds = boundsAt();
     if (!bounds && selectionOnly) return;
-    if (!bounds) { camX = 0; camY = 0; zoom = 1; minimumZoom = 0.1; markDirty(); return; }
+    if (!bounds) { camX = 0; camY = 0; zoom = zoomDePlantaVazia(); minimumZoom = 0.1; markDirty(); return; }
     let { minX, minY, maxX, maxY } = bounds;
     const padding = 80;
     // On phones the properties sheet overlays the lower canvas. Fit into the
@@ -2572,15 +2629,18 @@
       if (!wallStart) {
         wallStart = endPt;
         wallSequenceFirst = endPt;
+        wallSequenceCount = 0;
       } else {
         // Auto-close: if clicking near the first point of the sequence, close the loop
         if (wallSequenceFirst && Math.hypot(endPt.x - wallSequenceFirst.x, endPt.y - wallSequenceFirst.y) < 20 && Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y) > 20) {
           addWall(wallStart, wallSequenceFirst);
           wallStart = null;
           wallSequenceFirst = null;
+          wallSequenceCount = 0;
         } else if (Math.hypot(endPt.x - wallStart.x, endPt.y - wallStart.y) > 5) {
           addWall(wallStart, endPt);
           wallStart = endPt;
+          wallSequenceCount++;
         }
       }
     } else if (tool === 'select') {
@@ -2864,12 +2924,14 @@
       }
     }
     if (currentTool === 'wall' && wallStart && wallSequenceFirst) {
-      // Auto-close the wall loop back to the first point if we have at least 2 walls
-      if (Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y) > 5) {
+      // Fecha o contorno no primeiro ponto, mas só quando já há ambiente a fechar:
+      // com um trecho só, ligar a ponta ao começo devolveria paredes sobrepostas.
+      if (podeFecharAmbiente()) {
         addWall(wallStart, wallSequenceFirst);
       }
       wallStart = null;
       wallSequenceFirst = null;
+      wallSequenceCount = 0;
     }
   }
 
@@ -2883,10 +2945,15 @@
     return Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y);
   }
 
-  /** O contorno já tem trechos suficientes para valer a pena fechar. */
+  /**
+   * O contorno já pode virar ambiente.
+   *
+   * São precisos dois trechos: com um só, ligar a ponta ao começo devolveria
+   * duas paredes em cima da mesma linha, sem área nenhuma.
+   */
   function podeFecharAmbiente(): boolean {
     const distancia = distanciaAteOComeco();
-    return distancia !== null && distancia > 5;
+    return wallSequenceCount >= 2 && distancia !== null && distancia > 5;
   }
 
   /**
@@ -2894,8 +2961,9 @@
    * Dois metros é a folga que ainda parece "quase lá" numa planta de casa.
    */
   function quaseFechando(): boolean {
+    if (!podeFecharAmbiente()) return false;
     const distancia = distanciaAteOComeco();
-    return distancia !== null && distancia > 5 && distancia <= 200;
+    return distancia !== null && distancia <= 200;
   }
 
   function fecharAmbiente() {
@@ -2903,6 +2971,7 @@
     addWall(wallStart!, wallSequenceFirst!);
     wallStart = null;
     wallSequenceFirst = null;
+    wallSequenceCount = 0;
     typedWallLength = '';
     markDirty();
   }
@@ -2911,6 +2980,7 @@
   function terminarTracado() {
     wallStart = null;
     wallSequenceFirst = null;
+    wallSequenceCount = 0;
     typedWallLength = '';
     markDirty();
   }
@@ -3516,6 +3586,7 @@
         if (Math.hypot(endPt.x - wallStart.x, endPt.y - wallStart.y) > 1) {
           addWall(wallStart, endPt);
           wallStart = endPt;
+          wallSequenceCount++;
         }
         typedWallLength = '';
         markDirty();
@@ -3572,7 +3643,7 @@
       clearAuxiliarySelection();
       selectedRoomId.set(null);
       elevationPickMode.set(false);
-      wallStart = null; wallSequenceFirst = null; typedWallLength = '';
+      wallStart = null; wallSequenceFirst = null; wallSequenceCount = 0; typedWallLength = '';
       placingFurnitureId.set(null);
       placingEntourageId.set(null);
       placingStair.set(false);
@@ -3693,10 +3764,11 @@
     }
     // 'C' to close wall loop back to first point (but not Ctrl+C)
     if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey && wallStart && wallSequenceFirst) {
-      if (Math.hypot(wallStart.x - wallSequenceFirst.x, wallStart.y - wallSequenceFirst.y) > 5) {
+      if (podeFecharAmbiente()) {
         addWall(wallStart, wallSequenceFirst);
         wallStart = null;
         wallSequenceFirst = null;
+        wallSequenceCount = 0;
       }
     }
   }
@@ -4223,7 +4295,12 @@
     ></canvas>
   {/if}
   <!-- Keep controls above classic horizontal scrollbars, which consume height on Linux. -->
-  <div style:--visible-bottom={`${zoomControlsBottom}px`} class="absolute bottom-2 right-2 max-md:bottom-[calc(var(--visible-bottom)+4.5rem+env(safe-area-inset-bottom,0px))] max-md:left-2 max-md:right-2 max-md:overflow-x-auto max-md:min-h-12 max-md:items-center max-md:whitespace-nowrap max-md:[&>*]:shrink-0 bg-white/80 rounded px-2 py-1 text-xs text-gray-500 flex gap-3">
+  <div
+    bind:clientHeight={alturaBarraStatus}
+    style:bottom={telaDeCelular ? `${rodapeOcupado + 8}px` : undefined}
+    class="absolute bottom-2 right-2 max-md:left-2 max-md:right-2 max-md:overflow-x-auto max-md:min-h-12 max-md:items-center max-md:whitespace-nowrap max-md:[&>*]:shrink-0 bg-white/80 rounded px-2 py-1 text-xs text-gray-500 flex gap-3"
+    class:max-md:hidden={gavetaAberta}
+  >
     {#if detectedRooms.length > 0}
       <span>{$t(detectedRooms.length === 1 ? 'canvasStatus.roomsOne' : 'canvasStatus.roomsMany', { count: detectedRooms.length })}</span>
       <span>{formatArea(detectedRooms.reduce((s, r) => s + r.area, 0), $projectSettings.units)}</span>
@@ -4272,7 +4349,7 @@
   </div>
   <!-- Layer Visibility Panel -->
   {#if showLayerPanel}
-    <div style:--visible-bottom={`${zoomControlsBottom}px`} class="absolute bottom-12 right-2 max-md:bottom-[calc(var(--visible-bottom)+8rem+env(safe-area-inset-bottom,0px))] max-md:left-2 max-md:right-2 z-20 bg-white rounded-lg shadow-lg border border-gray-200 p-3 text-xs min-w-[160px]">
+    <div style:bottom={telaDeCelular ? `${rodapeOcupado + alturaBarraStatus + 16}px` : undefined} class="absolute bottom-12 right-2 max-md:left-2 max-md:right-2 z-20 bg-white rounded-lg shadow-lg border border-gray-200 p-3 text-xs min-w-[160px]">
       <div class="font-semibold text-gray-700 mb-2">{$t('layers.title')}</div>
       {#each [['walls',$t('layers.walls')],['doors',$t('layers.doors')],['windows',$t('layers.windows')],['furniture',$t('layers.furniture')],['stairs',$t('layers.stairs')],['columns',$t('layers.columns')],['guides',$t('layers.guides')],['measurements',$t('layers.measurements')],['annotations',$t('layerVisibility.dimensions')],['textAnnotations',$t('layers.textAnnotations')]] as [key, label]}
         <label class="flex items-center gap-2 py-0.5 cursor-pointer hover:bg-gray-50 rounded px-1">
@@ -4449,7 +4526,7 @@
   {/if}
 
   <!-- Zoom Controls (bottom-left) -->
-  <div style:bottom={telaDeCelular ? `calc(${zoomControlsBottom}px + 8rem + env(safe-area-inset-bottom, 0px))` : `${zoomControlsBottom}px`} class="absolute left-3 max-md:left-2 z-20 flex items-center gap-1 bg-white rounded-lg shadow-lg border border-gray-200 px-1 py-0.5">
+  <div style:bottom={telaDeCelular ? `${rodapeOcupado + (gavetaAberta ? 8 : alturaBarraStatus + 16)}px` : `${zoomControlsBottom}px`} class="absolute left-3 max-md:left-2 z-20 flex items-center gap-1 bg-white rounded-lg shadow-lg border border-gray-200 px-1 py-0.5">
     <button
       class="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 hover:text-gray-800 font-bold text-lg"
       title={$t('canvasZoom.outHint')}

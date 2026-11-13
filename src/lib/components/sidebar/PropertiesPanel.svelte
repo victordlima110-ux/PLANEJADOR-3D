@@ -5,6 +5,7 @@
   import { roomTypeLabels, roomColorLabels, floorGroupLabels, floorMaterialLabels } from '$lib/i18n/roomPropertyLabels';
   import { furnitureName, customModelName } from '$lib/i18n/furnitureNames';
   import { t, locale, type TranslationKey } from '$lib/i18n';
+  import { telaPequena } from '$lib/stores/telaPequena';
   const furnitureFinishLabels: Record<string, TranslationKey> = {"Wood": "furnitureFinish.Wood", "Metal": "furnitureFinish.Metal", "Fabric": "furnitureFinish.Fabric", "Leather": "furnitureFinish.Leather", "Glass": "furnitureFinish.Glass", "Plastic": "furnitureFinish.Plastic", "Stone": "furnitureFinish.Stone", "Ceramic": "furnitureFinish.Ceramic"};
   import { furnitureFinishes } from '$lib/utils/furnitureFinishes';
   import { resolveRooms } from '$lib/utils/roomDetection';
@@ -13,7 +14,7 @@
   import type { DetailTarget } from '$lib/models/types';
   import { catalogAssetUrl } from '$lib/utils/catalogAssetUrl';
 
-  import { currentProject, activeFloor, selectedElementId, selectedRoomId, updateWall, resizeWallLength, reverseWall, updateDoor, updateWindow, updateRoom, updateFurniture, detectedRoomsStore, updateStair, updateColumn, updateBackgroundImage, setBackgroundImage, calibrationMode, calibrationPoints, doorJoinMode, updateTextAnnotation, toggleFurnitureLock, updateEntourageItem, removeElement, elevationWallId } from '$lib/stores/project';
+  import { currentProject, activeFloor, selectedElementId, selectedElementIds, selectedRoomId, updateWall, resizeWallLength, reverseWall, updateDoor, updateWindow, updateRoom, updateFurniture, detectedRoomsStore, updateStair, updateColumn, updateBackgroundImage, setBackgroundImage, calibrationMode, calibrationPoints, doorJoinMode, updateTextAnnotation, toggleFurnitureLock, updateEntourageItem, removeElement, elevationWallId } from '$lib/stores/project';
   import { wallLength as calcWallLength, MIN_WALL_LENGTH, type WallEndpoint } from '$lib/utils/wallEditing';
   import { openingOnWall } from '$lib/utils/wallProfiles';
   import { getEntourageDef } from '$lib/utils/entourageCatalog';
@@ -364,8 +365,34 @@
   let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || (!is3D && hasBgImage));
 </script>
 
-<!-- Right sidebar on md+; slides up as a bottom sheet on phones -->
-<div data-plan-properties class="{is3D ? 'w-80' : 'w-64'} shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-y-auto p-3 fixed md:static right-0 top-12 bottom-9 z-40 shadow-lg max-md:top-auto max-md:bottom-0 max-md:left-0 max-md:w-full max-md:max-h-[45vh] max-md:border-l-0 max-md:border-t max-md:rounded-t-xl max-md:shadow-2xl" class:hidden={!hasSelection}>
+<!--
+  Barra lateral no computador; gaveta que sobe pelo rodapé no celular.
+
+  No celular ela para acima da barra de ferramentas, em vez de ficar por baixo
+  dela: os últimos campos estavam escondidos atrás dos botões e não dava para
+  tocá-los. O cabeçalho com o botão de fechar fica preso no topo da gaveta,
+  porque sem ele a única saída era adivinhar que um toque no vazio desfaz a
+  seleção.
+-->
+<div
+  data-plan-properties
+  class="{is3D ? 'w-80' : 'w-64'} shrink-0 bg-white border-l border-gray-200 flex flex-col overflow-y-auto p-3 fixed md:static right-0 top-12 bottom-9 z-40 shadow-lg max-md:top-auto max-md:left-0 max-md:w-full max-md:max-h-[42vh] max-md:border-l-0 max-md:border-t max-md:rounded-t-xl max-md:shadow-2xl max-md:pt-0"
+  style:bottom={$telaPequena ? 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' : undefined}
+  class:hidden={!hasSelection}
+>
+  {#if $telaPequena}
+    <div class="sticky top-0 -mx-3 mb-2 flex items-center justify-between gap-2 border-b border-gray-100 bg-white px-3 py-2">
+      <span class="h-1 w-10 rounded-full bg-gray-200" aria-hidden="true"></span>
+      <button
+        type="button"
+        class="-mr-1 flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 active:bg-gray-100 active:text-gray-700"
+        aria-label={$t('propriedades.fechar')}
+        onclick={() => { selectedElementId.set(null); selectedElementIds.set(new Set()); selectedRoomId.set(null); }}
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  {/if}
   {#if selectedWall}
     <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
       <span class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center text-xs">▭</span>

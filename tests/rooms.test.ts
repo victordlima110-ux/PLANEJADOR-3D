@@ -33,7 +33,7 @@ it('retains unlabeled rooms when only part of a floor has saved metadata', () =>
   const rooms = resolveRooms(floor);
   expect(rooms).toHaveLength(2);
   expect(rooms[0].name).toBe('Office');
-  expect(rooms[1].name).toBe('Room 2');
+  expect(rooms[1].name).toBe('Ambiente 2');
 });
 
 it('does not mix metadata between rooms with the same display name', () => {
@@ -46,7 +46,7 @@ it('does not mix metadata between rooms with the same display name', () => {
 it('does not resurrect undone metadata from a previous canvas frame', () => {
   const floor = roomProject().floors[0];
   const previous = resolveRooms(floor).map(room => ({ ...room, id: 'stable-id', name: 'Undone rename' }));
-  expect(resolveRooms(floor, previous)[0]).toMatchObject({ id: 'stable-id', name: 'Room 1' });
+  expect(resolveRooms(floor, previous)[0]).toMatchObject({ id: 'stable-id', name: 'Ambiente 1' });
 });
 
 it('drops rooms that no longer form a closed boundary', () => {

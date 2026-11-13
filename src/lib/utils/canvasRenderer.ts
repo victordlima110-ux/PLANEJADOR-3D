@@ -1512,25 +1512,51 @@ export function drawRooms(
     const centroid = roomCentroid(poly);
     const sc = wts(cs, centroid.x, centroid.y);
     const fontSize = Math.max(11, 13 * zoom);
-    if (showRoomLabels) {
+
+    // Quanto do ambiente aparece na tela. O texto tem tamanho mínimo, então num
+    // zoom afastado ele passa das paredes e se mistura com as cotas de fora —
+    // é melhor sumir do que deixar a planta ilegível. Quem precisa do nome
+    // aproxima, e aí ele volta.
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const pt of poly) { if (pt.x < minX) minX = pt.x; if (pt.x > maxX) maxX = pt.x; if (pt.y < minY) minY = pt.y; if (pt.y > maxY) maxY = pt.y; }
+    const larguraNaTela = (maxX - minX) * zoom;
+    const alturaNaTela = (maxY - minY) * zoom;
+    // As cotas internas são escritas junto das paredes, de cada lado, e avançam
+    // bastante para dentro. Com elas ligadas, o nome do ambiente só pode ocupar
+    // o terço do meio: senão as três legendas se escrevem umas sobre as outras
+    // e não se lê nenhuma.
+    const cotasInternas = showDimensions && dimSettings.showInternalDimensions;
+    const espacoLivre = cotasInternas ? larguraNaTela / 3 : larguraNaTela - 8;
+    const cabe = (texto: string) => ctx.measureText(texto).width <= espacoLivre;
+
+    let alturaDoRotulo = 0;
+    if (showRoomLabels && alturaNaTela >= fontSize + 4) {
       ctx.fillStyle = '#9ca3af';
       ctx.font = `${fontSize}px sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const anchor = roomLabelPosition(room, poly, holes[ri]);
       const label = wts(cs, anchor.x, anchor.y);
-      ctx.fillText(`${room.name} (${formatArea(room.area, dimSettings.units)})`, label.x, label.y);
+      // Sem espaço para o nome e a área juntos, fica só o nome; sem espaço nem
+      // para ele, nada é escrito.
+      const completo = `${room.name} (${formatArea(room.area, dimSettings.units)})`;
+      const texto = cabe(completo) ? completo : cabe(room.name) ? room.name : null;
+      if (texto) { ctx.fillText(texto, label.x, label.y); alturaDoRotulo = fontSize; }
     }
 
-    if (showDimensions && dimSettings.showInternalDimensions && poly.length >= 3) {
-      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const pt of poly) { if (pt.x < minX) minX = pt.x; if (pt.x > maxX) maxX = pt.x; if (pt.y < minY) minY = pt.y; if (pt.y > maxY) maxY = pt.y; }
+    // O tamanho escrito no centro do ambiente acompanha as cotas internas, como
+    // sempre acompanhou. Quem o esconde num ambiente pequeno é a regra de
+    // espaço acima — na impressão, onde sobra lugar, ele continua aparecendo.
+    if (cotasInternas && poly.length >= 3) {
       const roomW = (maxX - minX) / 100;
       const roomD = (maxY - minY) / 100;
       if (roomW > 0.1 && roomD > 0.1) {
         const dimFontSize = Math.max(9, 10 * zoom);
         ctx.fillStyle = '#b0b8c4'; ctx.font = `${dimFontSize}px sans-serif`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(`${formatLength(roomW * 100, dimSettings.units)} × ${formatLength(roomD * 100, dimSettings.units)}`, sc.x, sc.y + fontSize + 2);
+        const medidas = `${formatLength(roomW * 100, dimSettings.units)} × ${formatLength(roomD * 100, dimSettings.units)}`;
+        if (cabe(medidas) && alturaNaTela >= alturaDoRotulo + dimFontSize + 6) {
+          ctx.fillText(medidas, sc.x, sc.y + alturaDoRotulo + 2);
+        }
       }
     }
   }

@@ -115,9 +115,9 @@ it('still exports wall lengths, notes, stairs and every layer by default', async
   const text = await exportedText(project);
   for (const format of ['png', 'pdf', 'svg', 'dxf'] as const) {
     expect(text[format].filter(value => WALL_LABEL.test(value)), format).toHaveLength(4);
-    for (const label of ['Front porch', 'UP', 'Approx 13 ft', '2 m', 'Room 1']) expect(text[format], `${format} ${label}`).toContain(label);
+    for (const label of ['Front porch', 'UP', 'Approx 13 ft', '2 m', 'Ambiente 1']) expect(text[format], `${format} ${label}`).toContain(label);
   }
-  for (const label of ['Front porch', 'UP', 'Approx 13 ft', '2 m', 'Room 1 (12.0 m²)', 'Armchair']) expect(text.print).toContain(label);
+  for (const label of ['Front porch', 'UP', 'Approx 13 ft', '2 m', 'Ambiente 1 (12.0 m²)', 'Armchair']) expect(text.print).toContain(label);
   expect(project).toEqual(before);
 });
 
@@ -139,7 +139,7 @@ it('leaves hidden layers and room labels out of PNG, PDF, SVG, DXF and the Print
   const project = shellProject(), before = structuredClone(project);
   const text = await exportedText(project);
   for (const format of ['png', 'pdf', 'svg', 'dxf', 'print'] as const) {
-    for (const label of ['Front porch', 'UP', 'Approx 13 ft', '2 m', 'Armchair', '12.0 m²', 'Room 1', 'Room 1 (12.0 m²)']) {
+    for (const label of ['Front porch', 'UP', 'Approx 13 ft', '2 m', 'Armchair', '12.0 m²', 'Ambiente 1', 'Ambiente 1 (12.0 m²)']) {
       expect(text[format], `${format} ${label}`).not.toContain(label);
     }
   }
@@ -161,7 +161,7 @@ it('leaves hidden walls and their lengths out but keeps the rooms traced from th
   const text = await exportedText(project);
   for (const format of ['png', 'pdf', 'svg', 'dxf'] as const) {
     expect(text[format].filter(value => WALL_LABEL.test(value)), format).toEqual([]);
-    expect(text[format], format).toContain('Room 1');
+    expect(text[format], format).toContain('Ambiente 1');
   }
 });
 

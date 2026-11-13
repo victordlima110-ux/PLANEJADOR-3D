@@ -82,7 +82,18 @@
 </script>
 
 <div class="text-left">
-  <p class="mb-5 text-sm text-gray-500">{$t('lote.explicacao')}</p>
+  <p class="mb-4 text-sm text-gray-500">{$t('lote.explicacao')}</p>
+
+  <!-- Medidas de lote mais comuns, para quem já sabe o terreno e não quer digitar. -->
+  <div class="mb-4 flex flex-wrap gap-1.5">
+    {#each [[10, 20], [10, 25], [12, 30], [15, 30]] as [frente, fundo] (`${frente}x${fundo}`)}
+      <button
+        type="button"
+        class="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 active:border-blue-400 active:text-blue-700"
+        onclick={() => { largura = String(frente); profundidade = String(fundo); }}
+      >{frente}×{fundo} m</button>
+    {/each}
+  </div>
 
   <div class="grid grid-cols-2 gap-3">
     <label class="block">
