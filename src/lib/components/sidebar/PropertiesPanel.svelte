@@ -16,6 +16,7 @@
 
   import { currentProject, activeFloor, selectedElementId, selectedElementIds, selectedRoomId, updateWall, resizeWallLength, reverseWall, updateDoor, updateWindow, updateRoom, updateFurniture, detectedRoomsStore, updateStair, updateColumn, updateBackgroundImage, setBackgroundImage, calibrationMode, calibrationPoints, doorJoinMode, updateTextAnnotation, toggleFurnitureLock, updateEntourageItem, removeElement, elevationWallId } from '$lib/stores/project';
   import { wallLength as calcWallLength, MIN_WALL_LENGTH, type WallEndpoint } from '$lib/utils/wallEditing';
+  import { recuoDaMedida } from '$lib/utils/wallDimensionLabel';
   import { openingOnWall } from '$lib/utils/wallProfiles';
   import { getEntourageDef } from '$lib/utils/entourageCatalog';
   import { floorMaterials, wallColors } from '$lib/utils/materials';
@@ -66,7 +67,19 @@
   let selectedDoorWall = $derived((selectedDoor && floor?.walls?.find(w => w.id === selectedDoor.wallId)) ?? null);
   let selectedWindowWall = $derived((selectedWindow && floor?.walls?.find(w => w.id === selectedWindow.wallId)) ?? null);
 
-  let wallLength = $derived(selectedWall ? Math.round(calcWallLength(selectedWall) * 1000) / 1000 : 0);
+  /*
+   * O campo mostra a MESMA medida que está escrita na planta.
+   *
+   * Antes ele mostrava o comprimento da parede de ponta a ponta, enquanto a
+   * planta escrevia o vão livre: para ver 12 m na planta era preciso digitar
+   * 1215. Agora os dois números são o mesmo, e o comprimento de ponta a ponta
+   * fica embaixo, como informação.
+   */
+  let recuoDaParede = $derived(
+    selectedWall && floor ? recuoDaMedida(selectedWall, floor.walls, settings.wallMeasureMode) : 0,
+  );
+  let comprimentoDeEixo = $derived(selectedWall ? calcWallLength(selectedWall) : 0);
+  let wallLength = $derived(selectedWall ? Math.round((comprimentoDeEixo - recuoDaParede) * 1000) / 1000 : 0);
   let fixedEndpoint = $state<WallEndpoint>('start');
   let wallLengthError = $state<string | null>(null);
   let invalidWallLength = $state(false);
@@ -83,15 +96,19 @@
   function onWallLength(e: Event) {
     if (!selectedWall) return;
     const input = e.target as HTMLInputElement;
-    const current = calcWallLength(selectedWall);
-    const parsed = parseLengthInput(input.value, settings.units);
-    invalidWallLength = parsed === null || parsed < MIN_WALL_LENGTH;
-    if (parsed === null || parsed < MIN_WALL_LENGTH) {
+    const recuo = recuoDaParede;
+    const atualExibido = calcWallLength(selectedWall) - recuo;
+    const lido = parseLengthInput(input.value, settings.units);
+    // O que foi digitado é a medida da planta; a parede é redimensionada pelo
+    // eixo, então o recuo das paredes vizinhas volta antes de aplicar.
+    const alvoDeEixo = lido === null ? null : lido + recuo;
+    invalidWallLength = alvoDeEixo === null || alvoDeEixo < MIN_WALL_LENGTH;
+    if (alvoDeEixo === null || alvoDeEixo < MIN_WALL_LENGTH) {
       wallLengthError = null;
-    } else if (input.value.trim() !== String(displayValue(current))) {
-      wallLengthError = resizeWallLength(selectedWall.id, parsed, fixedEndpoint);
+    } else if (input.value.trim() !== String(displayValue(atualExibido))) {
+      wallLengthError = resizeWallLength(selectedWall.id, alvoDeEixo, fixedEndpoint);
     } else { wallLengthError = null; }
-    input.value = String(displayValue(calcWallLength(selectedWall)));
+    input.value = String(displayValue(calcWallLength(selectedWall) - recuoDaParede));
   }
 
   /** Blank/invalid drafts leave geometry untouched; restore the saved value on blur. */
@@ -404,9 +421,12 @@
   let medidaRapida = $derived.by((): { valor: number; minimo: number; passo: number; aplicar: (cm: number) => void } | null => {
     if (selectedWall) {
       const parede = selectedWall;
+      const recuo = recuoDaParede;
       return {
-        valor: calcWallLength(parede), minimo: MIN_WALL_LENGTH, passo: 10,
-        aplicar: (cm) => { wallLengthError = resizeWallLength(parede.id, cm, fixedEndpoint); },
+        valor: calcWallLength(parede) - recuo,
+        minimo: Math.max(1, MIN_WALL_LENGTH - recuo),
+        passo: 10,
+        aplicar: (cm) => { wallLengthError = resizeWallLength(parede.id, cm + recuo, fixedEndpoint); },
       };
     }
     if (selectedDoor) {
@@ -551,6 +571,9 @@
         <span class="text-xs text-gray-500">{$t('wallProperties.length')} ({unitLabel()})</span>
         <input type="text" value={displayValue(wallLength)} onblur={onWallLength} onkeydown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
       </label>
+      {#if recuoDaParede > 0}
+        <p class="text-xs text-gray-500">{$t('wallProperties.medidaDaPlanta', { eixo: formatLength(comprimentoDeEixo, settings.units) })}</p>
+      {/if}
       <p class="text-xs text-gray-500">{$t('wallProperties.entryHelp', { unit: unitLabel() })}</p>
       <label class="block">
         <span class="text-xs text-gray-500">{$t('wallProperties.fixed')}</span>

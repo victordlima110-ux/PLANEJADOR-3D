@@ -15,6 +15,7 @@ export interface ProjectSettings {
   snapToGrid: boolean;                   // snap elements to grid when dragging
   snapToWalls: boolean;                  // snap furniture to nearby walls when dragging
   gridSize: number;                      // grid snap size in cm (default 25)
+  sugerirMobilia: boolean;               // oferecer a mobília típica quando um ambiente fecha
 }
 
 export const defaultSettings: ProjectSettings = {
@@ -29,6 +30,7 @@ export const defaultSettings: ProjectSettings = {
   snapToGrid: true,
   snapToWalls: true,
   gridSize: 10,
+  sugerirMobilia: true,
 };
 
 // Load from localStorage if available

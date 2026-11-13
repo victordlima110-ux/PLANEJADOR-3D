@@ -16,3 +16,21 @@ export function wallDimensionLabel(wall: Wall, walls: Wall[], mode: 'centerline'
   return { length: Math.round(Math.max(0, length - inset.start - inset.end)),
     point: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 8 } };
 }
+
+/**
+ * Quanto a medida escrita na planta é menor do que o comprimento da parede.
+ *
+ * No modo "face a face" — o padrão — a planta escreve o vão livre: o
+ * comprimento da parede menos a meia espessura de cada parede que cruza nas
+ * pontas. Uma parede de 12,15 m entre duas paredes de 15 cm aparece como
+ * 12 m, que é a medida que o pedreiro vai usar.
+ *
+ * Essa diferença precisa ser conhecida em outros lugares além do desenho: o
+ * campo de comprimento das propriedades mostra e aceita a mesma medida da
+ * planta, senão seria preciso digitar 1215 para ver 1200.
+ */
+export function recuoDaMedida(wall: Wall, walls: Wall[], mode: 'centerline' | 'edge'): number {
+  if (mode !== 'edge' || wall.curvePoint) return 0;
+  const recuos = wallEdgeInsets(wall, walls);
+  return recuos.start + recuos.end;
+}

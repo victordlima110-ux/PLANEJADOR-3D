@@ -45,6 +45,7 @@
     snapToGrid: true,
     snapToWalls: true,
     gridSize: 25,
+    sugerirMobilia: true,
   });
 
   onDestroy(projectSettings.subscribe((s) => { settings = { ...s }; }));
@@ -129,6 +130,16 @@
                 type="checkbox"
                 checked={settings.snapToWalls}
                 onchange={(e) => updateSetting('snapToWalls', (e.target as HTMLInputElement).checked)}
+                class="w-10 h-5 rounded-full appearance-none cursor-pointer bg-gray-300 checked:bg-slate-700 relative transition-colors
+                  before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 before:transition-transform checked:before:translate-x-5"
+              />
+            </label>
+            <label class="flex items-center justify-between px-4 py-3.5 cursor-pointer">
+              <span class="text-sm text-gray-700 dark:text-gray-300" title={$t('settings.sugerirMobiliaHelp')}>{$t('settings.sugerirMobilia')}</span>
+              <input
+                type="checkbox"
+                checked={settings.sugerirMobilia}
+                onchange={(e) => updateSetting('sugerirMobilia', (e.target as HTMLInputElement).checked)}
                 class="w-10 h-5 rounded-full appearance-none cursor-pointer bg-gray-300 checked:bg-slate-700 relative transition-colors
                   before:content-[''] before:absolute before:w-4 before:h-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 before:transition-transform checked:before:translate-x-5"
               />

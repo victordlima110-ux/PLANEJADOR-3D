@@ -44,6 +44,7 @@
   import { marqueeSelectionIds } from '$lib/utils/marqueeSelection';
   import { isTracingImageType } from '$lib/utils/tracingImage';
   import { referenciasDeAlinhamento, semOPonto, alinharPonto, guiasVisiveis, eixosLivresDoTracado } from '$lib/utils/alinhamento';
+  import { distanciasAteAsParedes } from '$lib/utils/distanciasDoPonto';
   import { findRoomLabelAt as _findRoomLabelAt, positionOnWall, findWallAt as _findWallAt, findHandleAt as _findHandleAt, findFurnitureAt as _findFurnitureAt, findColumnAt as _findColumnAt, findStairAt as _findStairAt, findDoorAt as _findDoorAt, findWindowAt as _findWindowAt, findRoomAt as _findRoomAt, hitTestMeasurement as _hitTestMeasurement, hitTestAnnotation as _hitTestAnnotation, hitTestTextAnnotation as _hitTestTextAnnotation, findEntourageAt, definirFolgaDeToque } from '$lib/utils/hitTesting';
 
   let canvas: HTMLCanvasElement;
@@ -183,7 +184,7 @@
     units: 'metric', showDimensions: true, showExternalDimensions: true,
     showInternalDimensions: false, showExtensionLines: true,
     showObjectDistance: true, dimensionLineColor: '#1e293b',
-    wallMeasureMode: 'centerline', snapToGrid: true, snapToWalls: true, gridSize: 25,
+    wallMeasureMode: 'centerline', snapToGrid: true, snapToWalls: true, gridSize: 25, sugerirMobilia: true,
   });
   onDestroy(projectSettings.subscribe((s) => {
     dimSettings = s;
@@ -1055,6 +1056,7 @@
    * a cada parede que encosta.
    */
   function ofereceraMobilia(roomId: string, polygon: Point[]) {
+    if (!$projectSettings.sugerirMobilia) return;
     if (jaOferecidos.has(roomId) || polygon.length < 3) return;
     jaOferecidos.add(roomId);
     const xs = polygon.map(ponto => ponto.x), ys = polygon.map(ponto => ponto.y);
@@ -1064,11 +1066,39 @@
     // Sem mobília a sugerir (corredor, lavabo), não há o que oferecer.
     if (!palpite?.template) return;
     sugestao = { roomId, centro: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }, sugestao: palpite };
+    agendarSumicoDaSugestao();
+  }
+
+  /*
+   * A oferta some sozinha.
+   *
+   * Ficar parada sobre a planta até alguém responder transforma uma ajuda em
+   * obstáculo — quem não quer mobília nenhuma não deveria precisar recusar.
+   * Nove segundos dão tempo de ler e decidir; passou disso, ela sai de cena
+   * sem cobrar resposta, e quem quiser nunca mais ver usa "Não mostrar mais".
+   */
+  let sumicoDaSugestao: ReturnType<typeof setTimeout> | null = null;
+
+  function agendarSumicoDaSugestao() {
+    if (sumicoDaSugestao) clearTimeout(sumicoDaSugestao);
+    if (typeof window === 'undefined') return;
+    sumicoDaSugestao = setTimeout(() => { sugestao = null; sumicoDaSugestao = null; }, 9000);
+  }
+
+  function fecharSugestao() {
+    if (sumicoDaSugestao) { clearTimeout(sumicoDaSugestao); sumicoDaSugestao = null; }
+    sugestao = null;
+  }
+
+  /** Desliga a oferta de vez; volta pelo ajuste "Sugerir mobília". */
+  function nuncaMaisSugerir() {
+    fecharSugestao();
+    projectSettings.update(s => ({ ...s, sugerirMobilia: false }));
   }
 
   function aceitarSugestao() {
     const atual = sugestao;
-    sugestao = null;
+    fecharSugestao();
     const modelo = modeloDeAmbiente(atual?.sugestao.template ?? null);
     if (!atual || !modelo) return;
     beginUndoGroup();
@@ -1284,6 +1314,7 @@
   function draw() {
     if (canvas) updateZoomControlsPosition();
     if (!ctx) return;
+    pontaNaTela = null;
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = '#f8f9fa';
     ctx.fillRect(0, 0, width, height);
@@ -1651,6 +1682,42 @@
         ctx.fill();
         ctx.restore();
       }
+
+      // Folgas da ponta até as paredes dos quatro lados. É a medida que falta
+      // para posicionar uma divisória sem ficar no chute: o comprimento da
+      // parede nova não diz onde ela está dentro do cômodo.
+      pontaNaTela = worldToScreen(endPt.x, endPt.y);
+      ctx.save();
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      for (const folga of distanciasAteAsParedes(endPt, currentFloor?.walls ?? [])) {
+        // A folga que aponta de volta para o começo do traçado é o próprio
+        // comprimento da parede, que já está escrito na etiqueta. Duas vezes o
+        // mesmo número, um por cima do outro, só atrapalha.
+        if (Math.hypot(folga.alvo.x - wallStart.x, folga.alvo.y - wallStart.y) < 2) continue;
+        const ate = worldToScreen(folga.alvo.x, folga.alvo.y);
+        ctx.strokeStyle = '#64748b';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(pontaNaTela.x, pontaNaTela.y);
+        ctx.lineTo(ate.x, ate.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        const meioX = (pontaNaTela.x + ate.x) / 2;
+        const meioY = (pontaNaTela.y + ate.y) / 2;
+        // Só vale escrever quando a linha tem onde caber o número.
+        if (Math.hypot(ate.x - pontaNaTela.x, ate.y - pontaNaTela.y) < 34) continue;
+        const texto = formatLength(folga.distancia, dimSettings.units);
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(texto, meioX, meioY);
+        ctx.fillStyle = '#475569';
+        ctx.fillText(texto, meioX, meioY);
+      }
+      ctx.restore();
       const s = worldToScreen(wallStart.x, wallStart.y);
       const e = worldToScreen(endPt.x, endPt.y);
       const dx = e.x - s.x, dy = e.y - s.y;
@@ -1897,6 +1964,56 @@
     // Mini-map
     drawMinimap();
 
+    // Lupa do dedo — por último, para copiar a planta já desenhada.
+    desenharLupaDoDedo();
+  }
+
+  /* ── Lupa do dedo ──────────────────────────────────────────────────────
+     O dedo tapa justamente o ponto que está sendo desenhado. Em vez de pedir
+     que a pessoa tire o dedo para conferir, uma janelinha no alto mostra, bem
+     maior, o pedaço da planta que está debaixo dela — e fica sempre do lado
+     oposto ao dedo, para não ser tapada também.
+
+     A imagem é um recorte da própria tela já pronta, então nada precisa ser
+     desenhado duas vezes. */
+  const LUPA_LADO = 112;
+  const LUPA_AUMENTO = 2.4;
+  const LUPA_MARGEM = 10;
+  const LUPA_TOPO = 96;
+
+  function desenharLupaDoDedo() {
+    if (!ctx || !canvas || !pontaNaTela) return;
+    if (!telaDeCelular || !dedoTracandoParede) return;
+    const origem = LUPA_LADO / LUPA_AUMENTO;
+    const sx = pontaNaTela.x - origem / 2;
+    const sy = pontaNaTela.y - origem / 2;
+    // Do lado oposto ao dedo: com o dedo à direita, a lupa vai para a esquerda.
+    const x = pontaNaTela.x > width / 2 ? LUPA_MARGEM : width - LUPA_LADO - LUPA_MARGEM;
+    const y = LUPA_TOPO;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, LUPA_LADO, LUPA_LADO, 14);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = '#f8f9fa';
+    ctx.fillRect(x, y, LUPA_LADO, LUPA_LADO);
+    ctx.drawImage(canvas, sx, sy, origem, origem, x, y, LUPA_LADO, LUPA_LADO);
+    ctx.restore();
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Cruz no centro: é exatamente onde a ponta da parede está.
+    const cx = x + LUPA_LADO / 2;
+    const cy = y + LUPA_LADO / 2;
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy); ctx.lineTo(cx + 8, cy);
+    ctx.moveTo(cx, cy - 8); ctx.lineTo(cx, cy + 8);
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** True while the integrated elevation view covers the canvas area */
@@ -3468,6 +3585,10 @@
      valendo como antes: marca o ponto e o toque seguinte fecha o trecho. */
   let dedoTracandoParede = $state(false);
 
+  /* Onde a ponta da parede está na tela neste quadro. A lupa é desenhada por
+     último, depois de tudo, e precisa saber para onde olhar. */
+  let pontaNaTela: { x: number; y: number } | null = null;
+
   let pinchState: { dist: number; cx: number; cy: number } | null = null;
   let singleTouchActive = false;
   let singleTouchOrigin: { clientX: number; clientY: number } | null = null;
@@ -4747,21 +4868,29 @@
         ? `${rodapeOcupado + (gavetaAberta ? 8 : alturaBarraStatus + 16) + alturaBarraZoom + 12}px`
         : '4.5rem'}
     >
-      <p class="text-sm text-slate-700">
-        {$t('sugestao.pergunta', { ambiente: $t(sugestao.sugestao.chave as Parameters<typeof $t>[0]) })}
-      </p>
-      <div class="mt-2.5 flex gap-2">
+      <div class="flex items-center gap-2">
+        <p class="min-w-0 flex-1 text-sm text-slate-700">
+          {$t('sugestao.pergunta', { ambiente: $t(sugestao.sugestao.chave as Parameters<typeof $t>[0]) })}
+        </p>
         <button
           type="button"
-          class="min-h-10 flex-1 rounded-lg bg-blue-600 text-sm font-semibold text-white"
+          class="min-h-10 shrink-0 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white"
           onclick={aceitarSugestao}
         >{$t('sugestao.aceitar')}</button>
         <button
           type="button"
-          class="min-h-10 rounded-lg px-4 text-sm font-medium text-slate-500"
-          onclick={() => sugestao = null}
-        >{$t('sugestao.recusar')}</button>
+          class="flex h-10 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 active:bg-slate-100"
+          aria-label={$t('sugestao.recusar')}
+          onclick={fecharSugestao}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
+      <button
+        type="button"
+        class="mt-1 text-[11px] text-slate-400 underline"
+        onclick={nuncaMaisSugerir}
+      >{$t('sugestao.nuncaMais')}</button>
     </div>
   {/if}
 
