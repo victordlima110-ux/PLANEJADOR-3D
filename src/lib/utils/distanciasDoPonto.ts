@@ -83,3 +83,74 @@ export function distanciasAteAsParedes(
 
   return [...achados.values()];
 }
+
+/** Eixo em que a parede corre, ou null se ela é diagonal ou curva. */
+function eixoDaParede(parede: Wall): 'horizontal' | 'vertical' | null {
+  if (parede.curvePoint) return null;
+  const dx = Math.abs(parede.end.x - parede.start.x);
+  const dy = Math.abs(parede.end.y - parede.start.y);
+  if (dx < 1 && dy < 1) return null;
+  if (dy < 1) return 'horizontal';
+  if (dx < 1) return 'vertical';
+  return null;
+}
+
+/**
+ * As folgas de uma parede até as paredes à frente e atrás dela.
+ *
+ * Medidas a partir do meio da parede e só no sentido perpendicular: é a
+ * distância que posiciona a parede dentro do cômodo. Para uma divisória
+ * vertical, são a folga da esquerda e a da direita; para uma horizontal, a de
+ * cima e a de baixo.
+ */
+export function folgasPerpendiculares(parede: Wall, paredes: Wall[]): DistanciaAteParede[] {
+  const eixo = eixoDaParede(parede);
+  if (!eixo) return [];
+  const meio = {
+    x: (parede.start.x + parede.end.x) / 2,
+    y: (parede.start.y + parede.end.y) / 2,
+  };
+  const querido: Direcao[] = eixo === 'vertical' ? ['esquerda', 'direita'] : ['cima', 'baixo'];
+  return distanciasAteAsParedes(meio, paredes, new Set([parede.id]))
+    .filter((d) => querido.includes(d.direcao))
+    .sort((a, b) => querido.indexOf(a.direcao) - querido.indexOf(b.direcao));
+}
+
+/**
+ * Se a parede pode ser deslocada de lado sem desmanchar um canto.
+ *
+ * Uma parede que nasce no meio de outra (o caso de quem começa a divisória em
+ * cima da parede do cômodo) encosta nela em T: deslizar não desprende nada,
+ * porque as pontas continuam apoiadas ao longo da parede de trás. Já uma
+ * parede que divide a ponta com outra forma um canto — mover só ela abriria
+ * um vão, então a medida fica apenas para leitura.
+ */
+export function podeDeslizar(parede: Wall, paredes: Wall[]): boolean {
+  if (!eixoDaParede(parede)) return false;
+  const EP = 5;
+  for (const outra of paredes) {
+    if (outra.id === parede.id) continue;
+    for (const minha of [parede.start, parede.end]) {
+      for (const dela of [outra.start, outra.end]) {
+        if (Math.abs(minha.x - dela.x) < EP && Math.abs(minha.y - dela.y) < EP) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * Para onde a parede anda quando a folga de um lado passa a valer outra coisa.
+ *
+ * Aumentar a folga da esquerda empurra a parede para a direita; aumentar a da
+ * direita, para a esquerda — e o mesmo de cima para baixo.
+ */
+export function deslocamentoParaFolga(folga: DistanciaAteParede, nova: number): Point {
+  const diferenca = nova - folga.distancia;
+  switch (folga.direcao) {
+    case 'esquerda': return { x: diferenca, y: 0 };
+    case 'direita': return { x: -diferenca, y: 0 };
+    case 'cima': return { x: 0, y: diferenca };
+    case 'baixo': return { x: 0, y: -diferenca };
+  }
+}

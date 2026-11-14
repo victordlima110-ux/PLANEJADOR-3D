@@ -66,3 +66,64 @@ describe('distâncias da ponta até as paredes em volta', () => {
     expect(d).not.toHaveProperty('direita');
   });
 });
+
+import { folgasPerpendiculares, podeDeslizar, deslocamentoParaFolga } from '$lib/utils/distanciasDoPonto';
+
+// Uma divisória vertical nascida sobre as paredes de cima e de baixo, a 400 da esquerda.
+const divisoria = p('div', 400, 0, 400, 600);
+
+describe('folgas da parede dentro do cômodo', () => {
+  it('uma divisória vertical mede a folga da esquerda e da direita', () => {
+    const folgas = folgasPerpendiculares(divisoria, [...comodo, divisoria]);
+    expect(folgas.map((f) => [f.direcao, f.distancia])).toEqual([['esquerda', 400], ['direita', 600]]);
+  });
+
+  it('uma divisória horizontal mede de cima e de baixo', () => {
+    const horizontal = p('h', 0, 250, 1000, 250);
+    const folgas = folgasPerpendiculares(horizontal, [...comodo, horizontal]);
+    expect(folgas.map((f) => [f.direcao, f.distancia])).toEqual([['cima', 250], ['baixo', 350]]);
+  });
+
+  it('parede em diagonal não tem folga perpendicular para mostrar', () => {
+    expect(folgasPerpendiculares(p('d', 0, 0, 300, 200), comodo)).toEqual([]);
+  });
+
+  it('a parede não mede a si mesma', () => {
+    const folgas = folgasPerpendiculares(divisoria, [...comodo, divisoria]);
+    expect(folgas.every((f) => f.paredeId !== 'div')).toBe(true);
+  });
+});
+
+describe('deslizar a parede', () => {
+  it('uma divisória em T pode deslizar', () => {
+    expect(podeDeslizar(divisoria, [...comodo, divisoria])).toBe(true);
+  });
+
+  it('uma parede que forma canto com outra não pode', () => {
+    expect(podeDeslizar(comodo[0], comodo)).toBe(false);
+  });
+
+  it('parede em curva ou diagonal não desliza', () => {
+    expect(podeDeslizar(p('d', 0, 0, 300, 200), [])).toBe(false);
+    expect(podeDeslizar({ ...divisoria, curvePoint: { x: 400, y: 300 } } as Wall, [])).toBe(false);
+  });
+
+  it('aumentar a folga da esquerda empurra para a direita', () => {
+    const folga = folgasPerpendiculares(divisoria, [...comodo, divisoria])[0];
+    expect(deslocamentoParaFolga(folga, 500)).toEqual({ x: 100, y: 0 });
+    expect(deslocamentoParaFolga(folga, 300)).toEqual({ x: -100, y: 0 });
+  });
+
+  it('aumentar a folga da direita empurra para a esquerda', () => {
+    const folga = folgasPerpendiculares(divisoria, [...comodo, divisoria])[1];
+    expect(deslocamentoParaFolga(folga, 700)).toEqual({ x: -100, y: 0 });
+  });
+
+  it('as folgas opostas continuam somando a largura do cômodo depois de andar', () => {
+    const folgas = folgasPerpendiculares(divisoria, [...comodo, divisoria]);
+    const d = deslocamentoParaFolga(folgas[0], 250);
+    const movida = { ...divisoria, start: { x: 400 + d.x, y: 0 }, end: { x: 400 + d.x, y: 600 } };
+    const depois = folgasPerpendiculares(movida, [...comodo, movida]);
+    expect(depois.map((f) => f.distancia)).toEqual([250, 750]);
+  });
+});

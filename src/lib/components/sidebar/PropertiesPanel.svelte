@@ -17,6 +17,7 @@
   import { currentProject, activeFloor, selectedElementId, selectedElementIds, selectedRoomId, updateWall, resizeWallLength, reverseWall, updateDoor, updateWindow, updateRoom, updateFurniture, detectedRoomsStore, updateStair, updateColumn, updateBackgroundImage, setBackgroundImage, calibrationMode, calibrationPoints, doorJoinMode, updateTextAnnotation, toggleFurnitureLock, updateEntourageItem, removeElement, elevationWallId } from '$lib/stores/project';
   import { wallLength as calcWallLength, MIN_WALL_LENGTH, type WallEndpoint } from '$lib/utils/wallEditing';
   import { recuoDaMedida } from '$lib/utils/wallDimensionLabel';
+  import { folgasPerpendiculares, podeDeslizar, deslocamentoParaFolga, type DistanciaAteParede } from '$lib/utils/distanciasDoPonto';
   import { openingOnWall } from '$lib/utils/wallProfiles';
   import { getEntourageDef } from '$lib/utils/entourageCatalog';
   import { floorMaterials, wallColors } from '$lib/utils/materials';
@@ -79,6 +80,39 @@
     selectedWall && floor ? recuoDaMedida(selectedWall, floor.walls, settings.wallMeasureMode) : 0,
   );
   let comprimentoDeEixo = $derived(selectedWall ? calcWallLength(selectedWall) : 0);
+
+  /*
+   * Onde a parede está dentro do cômodo.
+   *
+   * O comprimento diz o tamanho dela; estas medidas dizem o lugar. É assim que
+   * se põe uma divisória a exatos 3 m da parede do fundo: desenha por cima da
+   * parede, de qualquer jeito, e depois escreve a distância aqui.
+   *
+   * Uma parede que forma canto com outra não pode andar sozinha sem abrir um
+   * vão, então nesse caso as medidas ficam só para leitura.
+   */
+  let folgasDaParede = $derived<DistanciaAteParede[]>(
+    selectedWall && floor ? folgasPerpendiculares(selectedWall, floor.walls) : [],
+  );
+  let paredeDesliza = $derived(!!selectedWall && !!floor && podeDeslizar(selectedWall, floor.walls));
+
+  const nomeDaDirecao: Record<DistanciaAteParede['direcao'], TranslationKey> = {
+    esquerda: 'folga.esquerda', direita: 'folga.direita', cima: 'folga.cima', baixo: 'folga.baixo',
+  };
+
+  function moverParaFolga(folga: DistanciaAteParede, e: Event) {
+    const input = e.target as HTMLInputElement;
+    const parede = selectedWall;
+    if (!parede) return;
+    const lido = parseLengthInput(input.value, settings.units);
+    if (lido === null || lido <= 0) { input.value = String(displayValue(folga.distancia)); return; }
+    const passo = deslocamentoParaFolga(folga, lido);
+    if (passo.x === 0 && passo.y === 0) return;
+    updateWall(parede.id, {
+      start: { x: parede.start.x + passo.x, y: parede.start.y + passo.y },
+      end: { x: parede.end.x + passo.x, y: parede.end.y + passo.y },
+    });
+  }
   let wallLength = $derived(selectedWall ? Math.round((comprimentoDeEixo - recuoDaParede) * 1000) / 1000 : 0);
   let fixedEndpoint = $state<WallEndpoint>('start');
   let wallLengthError = $state<string | null>(null);
@@ -575,6 +609,30 @@
         <p class="text-xs text-gray-500">{$t('wallProperties.medidaDaPlanta', { eixo: formatLength(comprimentoDeEixo, settings.units) })}</p>
       {/if}
       <p class="text-xs text-gray-500">{$t('wallProperties.entryHelp', { unit: unitLabel() })}</p>
+      {#if folgasDaParede.length > 0}
+        <div class="rounded-lg border border-gray-200 p-2">
+          <p class="mb-1.5 text-xs font-medium text-gray-600">{$t('folga.titulo')}</p>
+          <div class="grid grid-cols-2 gap-2">
+            {#each folgasDaParede as folga (folga.direcao)}
+              <label class="block">
+                <span class="text-xs text-gray-500">{$t(nomeDaDirecao[folga.direcao])} ({unitLabel()})</span>
+                <input
+                  type="text"
+                  inputmode="decimal"
+                  value={displayValue(folga.distancia)}
+                  readonly={!paredeDesliza}
+                  onblur={(event) => moverParaFolga(folga, event)}
+                  onkeydown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                  class="w-full rounded border border-gray-200 px-2 py-1 text-sm tabular-nums {paredeDesliza ? '' : 'bg-gray-50 text-gray-500'}"
+                />
+              </label>
+            {/each}
+          </div>
+          <p class="mt-1.5 text-[11px] text-gray-400">
+            {paredeDesliza ? $t('folga.ajuda') : $t('folga.presa')}
+          </p>
+        </div>
+      {/if}
       <label class="block">
         <span class="text-xs text-gray-500">{$t('wallProperties.fixed')}</span>
         <select bind:value={fixedEndpoint} class="w-full px-2 py-1 border border-gray-200 rounded text-sm">

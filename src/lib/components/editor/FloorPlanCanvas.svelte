@@ -1976,8 +1976,8 @@
 
      A imagem é um recorte da própria tela já pronta, então nada precisa ser
      desenhado duas vezes. */
-  const LUPA_LADO = 112;
-  const LUPA_AUMENTO = 2.4;
+  const LUPA_LADO = 134;
+  const LUPA_AUMENTO = 1.68;
   const LUPA_MARGEM = 10;
   const LUPA_TOPO = 96;
 
