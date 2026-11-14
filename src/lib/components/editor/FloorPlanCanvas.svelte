@@ -10,7 +10,7 @@
   import { planContentBounds, hasPlanContent } from '$lib/utils/planContentBounds';
   import { connectedWallEndpoints } from '$lib/utils/wallEditing';
   import { createDrawScheduler } from '$lib/utils/drawScheduler';
-  import { activeFloor, selectedTool, selectedElementId, selectedElementIds, selectedRoomId, addWall, addDoor, addWindow, updateWall, moveWallEndpoint, moveWallGeometryDuringDrag, updateDoor, updateWindow, addFurniture, moveFurniture, transformFurnitureDuringDrag, rotateFurniture, rotateSelection, setFurnitureRotation, scaleFurniture, removeElement, placingFurnitureId, placingRotation, placingDoorType, placingWindowType, detectedRoomsStore, duplicateDoor, duplicateWindow, duplicateFurniture, duplicateSelection, pasteSelection, moveWallParallel, splitWall, wallSplitIntersectsOpening, snapEnabled, placingStair, addStair, moveStair, updateStair, placingColumn, placingColumnShape, addColumn, moveColumn, updateColumn, calibrationMode, calibrationPoints, updateBackgroundImage, setBackgroundImage, canvasZoom, canvasMinimumZoom, canvasCamX, canvasCamY, panMode, showFurnitureStore, addGuide, moveGuide, removeGuide, beginUndoGroup, endUndoGroup, layerVisibility, updateRoom, addMeasurement, updateMeasurement, removeMeasurement, addAnnotation, removeAnnotation, updateAnnotation, addTextAnnotation, removeTextAnnotation, updateTextAnnotation, moveTextAnnotation, toggleFurnitureLock, toggleSelectionLock, createGroup, ungroupElements, findGroupForElement, placingEntourageId, addEntourageItem, moveEntourage, resizeEntourage, currentProject, elevationWallId, elevationPickMode, doorJoinMode, joinScanDoors } from '$lib/stores/project';
+  import { activeFloor, selectedTool, selectedElementId, selectedElementIds, selectedRoomId, addWall, addDoor, addWindow, updateWall, moveWallEndpoint, moveWallGeometryDuringDrag, updateDoor, updateWindow, addFurniture, moveFurniture, transformFurnitureDuringDrag, rotateFurniture, rotateSelection, setFurnitureRotation, scaleFurniture, removeElement, placingFurnitureId, placingRotation, placingDoorType, placingWindowType, detectedRoomsStore, duplicateDoor, duplicateWindow, duplicateFurniture, duplicateSelection, pasteSelection, moveWallParallel, splitWall, wallSplitIntersectsOpening, snapEnabled, placingStair, addStair, moveStair, updateStair, placingColumn, placingColumnShape, addColumn, moveColumn, updateColumn, calibrationMode, calibrationPoints, updateBackgroundImage, setBackgroundImage, canvasZoom, canvasMinimumZoom, canvasCamX, canvasCamY, panMode, showFurnitureStore, addGuide, moveGuide, removeGuide, beginUndoGroup, endUndoGroup, layerVisibility, updateRoom, addMeasurement, updateMeasurement, removeMeasurement, addAnnotation, removeAnnotation, updateAnnotation, addTextAnnotation, removeTextAnnotation, updateTextAnnotation, moveTextAnnotation, toggleFurnitureLock, toggleSelectionLock, createGroup, ungroupElements, findGroupForElement, placingEntourageId, addEntourageItem, moveEntourage, resizeEntourage, currentProject, elevationWallId, elevationPickMode, doorJoinMode, joinScanDoors, addArea } from '$lib/stores/project';
   import type { Point, Wall, Door, Window as Win, FurnitureItem, Stair, Column, GuideLine, Measurement, Annotation, TextAnnotation, CustomEntourageDef } from '$lib/models/types';
   import type { Floor, Room } from '$lib/models/types';
   import { resolveRoomGeometry, roomLabelPosition, roomCentroid } from '$lib/utils/roomDetection';
@@ -44,7 +44,7 @@
   import { marqueeSelectionIds } from '$lib/utils/marqueeSelection';
   import { isTracingImageType } from '$lib/utils/tracingImage';
   import { referenciasDeAlinhamento, semOPonto, alinharPonto, guiasVisiveis, eixosLivresDoTracado } from '$lib/utils/alinhamento';
-  import { distanciasAteAsParedes } from '$lib/utils/distanciasDoPonto';
+  import { distanciasAteAsParedes, folgasPerpendiculares, type DistanciaAteParede } from '$lib/utils/distanciasDoPonto';
   import { findRoomLabelAt as _findRoomLabelAt, positionOnWall, findWallAt as _findWallAt, findHandleAt as _findHandleAt, findFurnitureAt as _findFurnitureAt, findColumnAt as _findColumnAt, findStairAt as _findStairAt, findDoorAt as _findDoorAt, findWindowAt as _findWindowAt, findRoomAt as _findRoomAt, hitTestMeasurement as _hitTestMeasurement, hitTestAnnotation as _hitTestAnnotation, hitTestTextAnnotation as _hitTestTextAnnotation, findEntourageAt, definirFolgaDeToque } from '$lib/utils/hitTesting';
 
   let canvas: HTMLCanvasElement;
@@ -1662,62 +1662,9 @@
       drawAngleGuides(wallStart);
       const endPt = applyTypedWallLength(snapWallEndPoint(mousePos));
 
-      // Tracejado vermelho até a ponta de parede com que esta ficou alinhada.
-      // Vai antes do corpo da parede e das etiquetas, que continuam por cima.
-      for (const guia of guiasVisiveis(endPt, referenciasParaAlinhar())) {
-        const de = worldToScreen(guia.referencia.x, guia.referencia.y);
-        const ate = worldToScreen(endPt.x, endPt.y);
-        ctx.save();
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([7, 5]);
-        ctx.beginPath();
-        ctx.moveTo(de.x, de.y);
-        ctx.lineTo(ate.x, ate.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(de.x, de.y, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // Folgas da ponta até as paredes dos quatro lados. É a medida que falta
-      // para posicionar uma divisória sem ficar no chute: o comprimento da
-      // parede nova não diz onde ela está dentro do cômodo.
+      desenharGuiasDeAlinhamento(endPt);
       pontaNaTela = worldToScreen(endPt.x, endPt.y);
-      ctx.save();
-      ctx.font = '10px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineJoin = 'round';
-      for (const folga of distanciasAteAsParedes(endPt, currentFloor?.walls ?? [])) {
-        // A folga que aponta de volta para o começo do traçado é o próprio
-        // comprimento da parede, que já está escrito na etiqueta. Duas vezes o
-        // mesmo número, um por cima do outro, só atrapalha.
-        if (Math.hypot(folga.alvo.x - wallStart.x, folga.alvo.y - wallStart.y) < 2) continue;
-        const ate = worldToScreen(folga.alvo.x, folga.alvo.y);
-        ctx.strokeStyle = '#64748b';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath();
-        ctx.moveTo(pontaNaTela.x, pontaNaTela.y);
-        ctx.lineTo(ate.x, ate.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        const meioX = (pontaNaTela.x + ate.x) / 2;
-        const meioY = (pontaNaTela.y + ate.y) / 2;
-        // Só vale escrever quando a linha tem onde caber o número.
-        if (Math.hypot(ate.x - pontaNaTela.x, ate.y - pontaNaTela.y) < 34) continue;
-        const texto = formatLength(folga.distancia, dimSettings.units);
-        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
-        ctx.lineWidth = 3;
-        ctx.strokeText(texto, meioX, meioY);
-        ctx.fillStyle = '#475569';
-        ctx.fillText(texto, meioX, meioY);
-      }
-      ctx.restore();
+      desenharFolgas(endPt, distanciasAteAsParedes(endPt, currentFloor?.walls ?? []), wallStart);
       const s = worldToScreen(wallStart.x, wallStart.y);
       const e = worldToScreen(endPt.x, endPt.y);
       const dx = e.x - s.x, dy = e.y - s.y;
@@ -1958,6 +1905,27 @@
       ctx.restore();
     }
 
+    desenharAreas();
+
+    /*
+     * A parede já pronta também mostra onde está.
+     *
+     * Antes as cotas de folga só existiam enquanto a parede estava sendo
+     * puxada: bastava soltar o dedo para perder a medida. Agora a parede
+     * selecionada as mantém na tela, e a ponta arrastada pela alça ganha o
+     * tracejado vermelho e as cotas do mesmo jeito que no traçado.
+     */
+    if (pontaArrastada) {
+      desenharGuiasDeAlinhamento(pontaArrastada, referenciasDoArraste);
+      desenharFolgas(pontaArrastada, distanciasAteAsParedes(pontaArrastada, currentFloor?.walls ?? [], new Set(draggingWallEndpoint ? [draggingWallEndpoint.wallId] : [])));
+    } else if (currentSelectedId && currentFloor && currentTool === 'select') {
+      const escolhida = currentFloor.walls.find(w => w.id === currentSelectedId);
+      if (escolhida) {
+        const meio = { x: (escolhida.start.x + escolhida.end.x) / 2, y: (escolhida.start.y + escolhida.end.y) / 2 };
+        desenharFolgas(meio, folgasPerpendiculares(escolhida, currentFloor.walls));
+      }
+    }
+
     // Rulers (drawn last, on top of everything)
     drawRulers();
 
@@ -1976,8 +1944,79 @@
 
      A imagem é um recorte da própria tela já pronta, então nada precisa ser
      desenhado duas vezes. */
+  /* ── Tracejado vermelho e cotas de folga ───────────────────────────────
+     Duas ajudas que valem em tudo que se arrasta na planta, não só na parede
+     sendo desenhada: o tracejado diz com o que a coisa ficou alinhada, e as
+     cotas finas dizem a que distância ela está das paredes em volta. Ficam
+     aqui, em funções próprias, para cada gesto poder chamar as duas. */
+
+  /** Tracejado vermelho da ponta até a ponta de parede com que ela se alinhou. */
+  function desenharGuiasDeAlinhamento(ponta: Point, referencias = referenciasParaAlinhar()) {
+    if (!ctx) return;
+    for (const guia of guiasVisiveis(ponta, referencias)) {
+      const de = worldToScreen(guia.referencia.x, guia.referencia.y);
+      const ate = worldToScreen(ponta.x, ponta.y);
+      ctx.save();
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([7, 5]);
+      ctx.beginPath();
+      ctx.moveTo(de.x, de.y);
+      ctx.lineTo(ate.x, ate.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(de.x, de.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Cotas finas de um ponto até as paredes em volta.
+   *
+   * `ignorarAlvoEm` apaga a cota que aponta de volta para um ponto conhecido —
+   * no traçado, o começo da parede, cuja distância já está escrita na etiqueta
+   * de comprimento.
+   */
+  function desenharFolgas(origem: Point, folgas: DistanciaAteParede[], ignorarAlvoEm?: Point | null) {
+    if (!ctx || folgas.length === 0) return;
+    const daOrigem = worldToScreen(origem.x, origem.y);
+    ctx.save();
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    for (const folga of folgas) {
+      if (ignorarAlvoEm && Math.hypot(folga.alvo.x - ignorarAlvoEm.x, folga.alvo.y - ignorarAlvoEm.y) < 2) continue;
+      const ate = worldToScreen(folga.alvo.x, folga.alvo.y);
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(daOrigem.x, daOrigem.y);
+      ctx.lineTo(ate.x, ate.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Só vale escrever quando a linha tem onde caber o número.
+      if (Math.hypot(ate.x - daOrigem.x, ate.y - daOrigem.y) < 34) continue;
+      const texto = formatLength(folga.distancia, dimSettings.units);
+      // A 30% do caminho, e não no meio: o meio do cômodo é onde mora o nome
+      // do ambiente, e os dois textos se escreviam um por cima do outro.
+      const meioX = daOrigem.x + (ate.x - daOrigem.x) * 0.3;
+      const meioY = daOrigem.y + (ate.y - daOrigem.y) * 0.3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(texto, meioX, meioY);
+      ctx.fillStyle = '#475569';
+      ctx.fillText(texto, meioX, meioY);
+    }
+    ctx.restore();
+  }
+
   const LUPA_LADO = 134;
-  const LUPA_AUMENTO = 1.68;
+  const LUPA_AUMENTO = 1.18;
   const LUPA_MARGEM = 10;
   const LUPA_TOPO = 96;
 
@@ -2762,7 +2801,9 @@
       return;
     }
 
-    if (tool === 'wall') {
+    if (tool === 'area') {
+      areaStart = { x: snap(wp.x), y: snap(wp.y) };
+    } else if (tool === 'wall') {
       // No dedo quem fixa o trecho é o levantar do dedo, em onTouchEnd: aqui o
       // toque só serviria para marcar o ponto duas vezes.
       if (!dedoTracandoParede) avancarTracadoParede(wp);
@@ -2921,6 +2962,13 @@
       if (wall) {
         if (selectElement(wall.id, e.shiftKey)) return;
       } else {
+        // A área demarcada é pega pela borda ou pelo rótulo, depois das paredes:
+        // ela é um contorno por cima do piso e não pode roubar o clique de nada.
+        const area = findAreaAt(wp);
+        if (area) {
+          if (selectElement(area.id, e.shiftKey)) return;
+          return;
+        }
         // Check if clicking on a room label (for dragging)
         const labelRoom = findRoomLabelAt(wp);
         if (labelRoom) {
@@ -3231,8 +3279,19 @@
           const other = draggingWallEndpoint.endpoint === 'start' ? wall.end : wall.start;
           if (e.shiftKey) pt = angleSnapWithin(other, pt, Infinity);
           else if (currentSnapEnabled && !pt.snappedToEndpoint && !pt.snappedToWall) pt = angleSnapWithin(other, pt, MAGNETIC_SNAP / zoom);
+          // Mesmo alinhamento do traçado: a ponta arrastada procura o prumo e a
+          // altura das outras paredes, sem entortar a que está sendo mexida.
+          referenciasDoArraste = semOPonto(referenciasDeAlinhamento(currentFloor.walls, excludeIds), other);
+          if (currentSnapEnabled && !pt.snappedToEndpoint && !pt.snappedToWall) {
+            const eixos = eixosLivresDoTracado(other, pt);
+            if (eixos !== 'ambos') {
+              const alinhado = alinharPonto(pt, referenciasDoArraste, MAGNETIC_SNAP / zoom, eixos);
+              pt = { ...pt, x: alinhado.x, y: alinhado.y };
+            }
+          }
         }
       }
+      pontaArrastada = { x: pt.x, y: pt.y };
       moveWallEndpoint(draggingWallEndpoint.wallId, draggingWallEndpoint.endpoint, pt);
       // Move all connected endpoints together
       for (const conn of draggingConnectedEndpoints) {
@@ -3525,7 +3584,10 @@
     draggingDoorId = null;
     draggingWindowId = null;
     draggingHandle = null;
+    if (areaStart && currentTool === 'area') terminarArea({ x: snap(mousePos.x), y: snap(mousePos.y) });
     draggingWallEndpoint = null;
+    pontaArrastada = null;
+    referenciasDoArraste = [];
     draggingConnectedEndpoints = [];
     wallSnapInfo = null;
   }
@@ -3588,6 +3650,124 @@
   /* Onde a ponta da parede está na tela neste quadro. A lupa é desenhada por
      último, depois de tudo, e precisa saber para onde olhar. */
   let pontaNaTela: { x: number; y: number } | null = null;
+
+  /* Ponta de parede que está sendo arrastada pela alça, e as referências que
+     valem para ela. Guardadas para o desenho mostrar o mesmo tracejado e as
+     mesmas cotas que aparecem quando a parede está sendo criada — mudar uma
+     parede pronta é o mesmo gesto, e merece a mesma ajuda. */
+  /* ── Área demarcada ────────────────────────────────────────────────────
+     Sala e cozinha integradas são um ambiente só para quem detecta contornos
+     fechados. A área demarcada é o retângulo tracejado que a pessoa desenha
+     por cima do piso para dizer onde começa a cozinha: nomeia e mede, e não
+     encosta na planta. */
+  let areaStart: Point | null = $state(null);
+  const AREA_COR = '#7c3aed';
+  const AREA_MINIMA = 30;
+
+  /** Retângulo de uma área, já com os cantos em ordem. */
+  function retanguloDaArea(area: { start: Point; end: Point }) {
+    return {
+      minX: Math.min(area.start.x, area.end.x), maxX: Math.max(area.start.x, area.end.x),
+      minY: Math.min(area.start.y, area.end.y), maxY: Math.max(area.start.y, area.end.y),
+    };
+  }
+
+  /**
+   * A área sob o ponto, pegando pela borda ou pelo rótulo.
+   *
+   * O miolo fica livre de propósito: dentro da área há móveis e o próprio
+   * ambiente, e tocar neles tem de continuar funcionando.
+   */
+  function findAreaAt(p: Point) {
+    if (!currentFloor?.areas) return null;
+    const folga = 10 / zoom;
+    for (const area of [...currentFloor.areas].reverse()) {
+      const r = retanguloDaArea(area);
+      const dentroEmX = p.x >= r.minX - folga && p.x <= r.maxX + folga;
+      const dentroEmY = p.y >= r.minY - folga && p.y <= r.maxY + folga;
+      if (!dentroEmX || !dentroEmY) continue;
+      const naBorda = Math.abs(p.x - r.minX) < folga || Math.abs(p.x - r.maxX) < folga
+        || Math.abs(p.y - r.minY) < folga || Math.abs(p.y - r.maxY) < folga;
+      const noRotulo = Math.abs(p.x - (r.minX + r.maxX) / 2) < 70 / zoom
+        && Math.abs(p.y - (r.minY + r.maxY) / 2) < 22 / zoom;
+      if (naBorda || noRotulo) return area;
+    }
+    return null;
+  }
+
+  /** Fecha o retângulo quando o dedo ou o mouse solta. */
+  function terminarArea(fim: Point) {
+    const comeco = areaStart;
+    areaStart = null;
+    if (!comeco) return;
+    if (Math.abs(fim.x - comeco.x) < AREA_MINIMA || Math.abs(fim.y - comeco.y) < AREA_MINIMA) return;
+    const quantas = (currentFloor?.areas?.length ?? 0) + 1;
+    const id = addArea(comeco, fim, $t('area.padrao', { numero: quantas }));
+    selectedElementId.set(id);
+    selectedElementIds.set(new Set());
+    selectedRoomId.set(null);
+    markDirty();
+  }
+
+  /** Desenha as áreas já criadas e a que está sendo puxada agora. */
+  function desenharAreas() {
+    if (!ctx) return;
+    const todas: { id: string; name: string; start: Point; end: Point }[] = [...(currentFloor?.areas ?? [])];
+    if (areaStart) todas.push({ id: '', name: '', start: areaStart, end: mousePos });
+    for (const area of todas) {
+      const r = retanguloDaArea(area);
+      const a = worldToScreen(r.minX, r.minY);
+      const b = worldToScreen(r.maxX, r.maxY);
+      const escolhida = !!area.id && area.id === currentSelectedId;
+      ctx.save();
+      ctx.strokeStyle = AREA_COR;
+      ctx.lineWidth = escolhida ? 2.5 : 1.5;
+      ctx.setLineDash([8, 5]);
+      ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(124, 58, 237, 0.06)';
+      ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+
+      const largura = r.maxX - r.minX, profundidade = r.maxY - r.minY;
+      const medidas = `${formatLength(largura, dimSettings.units)} × ${formatLength(profundidade, dimSettings.units)}`;
+      const nome = area.name || medidas;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round';
+      const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      /*
+       * O texto fica dentro do retângulo ou não aparece.
+       *
+       * Transbordar seria pior do que não escrever: a medida da área iria
+       * parar por cima das cotas do ambiente, e nenhuma das duas se leria.
+       * Primeiro sai a linha da medida, depois o nome.
+       */
+      const larguraNaTela = Math.abs(b.x - a.x);
+      const alturaNaTela = Math.abs(b.y - a.y);
+      const escreverCentrado = (texto: string, y: number, cor: string) => {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(texto, cx, y);
+        ctx.fillStyle = cor;
+        ctx.fillText(texto, cx, y);
+      };
+      // formatArea já recebe metros quadrados, e as medidas aqui são em centímetros.
+      const linha = `${medidas} · ${formatArea((largura / 100) * (profundidade / 100), dimSettings.units)}`;
+      ctx.font = '10px system-ui, sans-serif';
+      const cabeMedida = alturaNaTela > 32 && ctx.measureText(linha).width <= larguraNaTela - 8;
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      const cabeNome = alturaNaTela > 16 && ctx.measureText(nome).width <= larguraNaTela - 8;
+      if (cabeNome) escreverCentrado(nome, cabeMedida ? cy - 7 : cy, AREA_COR);
+      if (cabeMedida) {
+        ctx.font = '10px system-ui, sans-serif';
+        escreverCentrado(linha, cabeNome ? cy + 8 : cy, '#6d28d9');
+      }
+      ctx.restore();
+    }
+  }
+
+  let pontaArrastada: Point | null = null;
+  let referenciasDoArraste: Point[] = [];
 
   let pinchState: { dist: number; cx: number; cy: number } | null = null;
   let singleTouchActive = false;

@@ -541,6 +541,23 @@
           </div>
         </button>
 
+        <!--
+          Demarcar área: para nomear um pedaço de ambiente que não tem parede
+          em volta, como a cozinha de uma sala integrada.
+        -->
+        <button
+          class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors {currentTool === 'area' ? 'bg-blue-50 text-slate-800 ring-1 ring-blue-200' : 'hover:bg-gray-50 text-gray-700'}"
+          onclick={() => setTool('area')}
+        >
+          <div class="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center {currentTool === 'area' ? 'bg-blue-100' : ''}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" stroke-dasharray="4 3"/><path d="M8 12h8"/></svg>
+          </div>
+          <div class="text-left">
+            <div class="font-medium">{$t('buildTools.area')}</div>
+            <div class="text-xs text-gray-400">{$t('buildTools.areaHelp')}</div>
+          </div>
+        </button>
+
         <button
           class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors {currentTool === 'annotate' ? 'bg-blue-50 text-slate-800 ring-1 ring-blue-200' : 'hover:bg-gray-50 text-gray-700'}"
           onclick={() => setTool('annotate')}

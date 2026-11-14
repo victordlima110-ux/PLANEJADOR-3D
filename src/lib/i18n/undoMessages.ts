@@ -8,6 +8,7 @@ const keys: Extract<TranslationKey, `undoAction.${string}`>[] = [
   'undoAction.group',
   'undoAction.current',
   'undoAction.customEntourage',
+  'undoAction.area',
   'undoAction.entourage',
   'undoAction.floor',
   'undoAction.stair',

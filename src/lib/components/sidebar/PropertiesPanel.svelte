@@ -14,6 +14,7 @@
   import type { DetailTarget } from '$lib/models/types';
   import { catalogAssetUrl } from '$lib/utils/catalogAssetUrl';
 
+  import { updateArea } from '$lib/stores/project';
   import { currentProject, activeFloor, selectedElementId, selectedElementIds, selectedRoomId, updateWall, resizeWallLength, reverseWall, updateDoor, updateWindow, updateRoom, updateFurniture, detectedRoomsStore, updateStair, updateColumn, updateBackgroundImage, setBackgroundImage, calibrationMode, calibrationPoints, doorJoinMode, updateTextAnnotation, toggleFurnitureLock, updateEntourageItem, removeElement, elevationWallId } from '$lib/stores/project';
   import { wallLength as calcWallLength, MIN_WALL_LENGTH, type WallEndpoint } from '$lib/utils/wallEditing';
   import { recuoDaMedida } from '$lib/utils/wallDimensionLabel';
@@ -59,6 +60,7 @@
   let selectedColumn = $derived(floor?.columns?.find(c => c.id === selId) ?? null);
   let selectedTextAnnotation = $derived(floor?.textAnnotations?.find(t => t.id === selId) ?? null);
   let selectedEntourage = $derived(floor?.entourage?.find(en => en.id === selId) ?? null);
+  let selectedArea = $derived(floor?.areas?.find(ar => ar.id === selId) ?? null);
   let hasBgImage = $derived(!!floor?.backgroundImage);
   let selectedRoom = $derived(floor && selRoomId
     ? resolveRooms(floor, detectedRooms).find(r => r.id === selRoomId) ?? null
@@ -440,6 +442,7 @@
     : selectedEntourage ? $t('entourageLabels.title')
     : selectedStair ? $t('stairProperties.heading')
     : selectedColumn ? $t('columnProperties.heading')
+    : selectedArea ? (selectedArea.name || $t('area.heading'))
     : selectedTextAnnotation ? $t('annotationProperties.heading')
     : $t('backgroundProperties.heading'),
   );
@@ -471,6 +474,14 @@
       const janela = selectedWindow;
       return { valor: janela.width, minimo: 10, passo: 5, aplicar: (cm) => updateWindow(janela.id, { width: cm }) };
     }
+    if (selectedArea) {
+      const marcada = selectedArea;
+      const minX = Math.min(marcada.start.x, marcada.end.x);
+      return {
+        valor: Math.abs(marcada.end.x - marcada.start.x), minimo: 30, passo: 10,
+        aplicar: (cm) => updateArea(marcada.id, { start: { ...marcada.start, x: minX }, end: { ...marcada.end, x: minX + cm } }),
+      };
+    }
     if (selectedStair) {
       const escada = selectedStair;
       return { valor: escada.width, minimo: 30, passo: 5, aplicar: (cm) => updateStair(escada.id, { width: cm }) };
@@ -499,13 +510,30 @@
     input.value = String(displayValue(medidaRapida?.valor ?? medida.valor));
   }
 
+  /** Muda a largura ou a profundidade da área mantendo o canto de cima à esquerda. */
+  function redimensionarArea(eixo: 'x' | 'y', e: Event) {
+    const marcada = selectedArea;
+    if (!marcada) return;
+    const input = e.target as HTMLInputElement;
+    const valor = input.valueAsNumber;
+    if (!Number.isFinite(valor) || valor < 30) {
+      input.value = String(displayValue(Math.abs(marcada.end[eixo] - marcada.start[eixo])));
+      return;
+    }
+    const menor = Math.min(marcada.start[eixo], marcada.end[eixo]);
+    updateArea(marcada.id, {
+      start: { ...marcada.start, [eixo]: menor },
+      end: { ...marcada.end, [eixo]: menor + valor },
+    });
+  }
+
   function limparSelecao() {
     selectedElementId.set(null);
     selectedElementIds.set(new Set());
     selectedRoomId.set(null);
   }
 
-  let hasSelection = $derived(!!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || (!is3D && hasBgImage));
+  let hasSelection = $derived(!!selectedArea || !!selectedWall || !!selectedDoor || !!selectedWindow || !!selectedFurniture || !!selectedRoom || !!selectedStair || !!selectedColumn || !!selectedTextAnnotation || !!selectedEntourage || (!is3D && hasBgImage));
 </script>
 
 <!--
@@ -1282,6 +1310,43 @@
           <input type="number" value={selectedColumn.rotation} oninput={(e) => scalarInput(e, selectedColumn!.rotation, value => updateColumn(selectedColumn!.id, { rotation: value }))} onblur={(e) => scalarInput(e, selectedColumn!.rotation, value => updateColumn(selectedColumn!.id, { rotation: value }))} step="any" class="w-full px-2 py-1 border border-gray-200 rounded text-sm" />
         </label>
       {/if}
+    </div>
+  {:else if selectedArea}
+    <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+      <span class="w-6 h-6 bg-violet-100 rounded flex items-center justify-center text-xs">⬚</span>
+      {$t('area.heading')}
+    </h3>
+    <div class="space-y-3">
+      <label class="block">
+        <span class="text-xs text-gray-500">{$t('area.nome')}</span>
+        <input
+          type="text"
+          value={selectedArea.name}
+          oninput={(event) => updateArea(selectedArea!.id, { name: (event.currentTarget as HTMLInputElement).value })}
+          class="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+        />
+      </label>
+      <div class="grid grid-cols-2 gap-2">
+        <label class="block">
+          <span class="text-xs text-gray-500">{$t('area.largura')} ({unitLabel()})</span>
+          <input
+            type="number" min="30" step="any"
+            value={displayValue(Math.abs(selectedArea.end.x - selectedArea.start.x))}
+            onblur={(event) => redimensionarArea('x', event)}
+            class="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+          />
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-500">{$t('area.profundidade')} ({unitLabel()})</span>
+          <input
+            type="number" min="30" step="any"
+            value={displayValue(Math.abs(selectedArea.end.y - selectedArea.start.y))}
+            onblur={(event) => redimensionarArea('y', event)}
+            class="w-full px-2 py-1 border border-gray-200 rounded text-sm"
+          />
+        </label>
+      </div>
+      <p class="text-xs text-gray-500">{$t('area.ajuda')}</p>
     </div>
   {:else if selectedTextAnnotation}
     <div class="space-y-3">

@@ -212,6 +212,26 @@ export interface CustomEntourageDef {
   aspect: number; // height / width
 }
 
+/**
+ * Um pedaço de ambiente demarcado e batizado.
+ *
+ * Nem toda divisão de uma casa tem parede. Sala e cozinha integradas são um
+ * cômodo só para o programa, que detecta ambientes pelo contorno fechado das
+ * paredes — e aí não há o que nomear separadamente. A área demarcada é o
+ * contorno tracejado que se desenha por cima do piso para dizer "daqui até
+ * aqui é a cozinha": não é parede, não muda a planta e não entra na detecção
+ * de ambientes, só nomeia e mede o pedaço.
+ */
+export interface AreaMarcada {
+  id: string;
+  name: string;
+  /** Cantos opostos do retângulo, em centímetros. */
+  start: Point;
+  end: Point;
+  /** Cor do contorno e do rótulo; o padrão é usado quando não há uma. */
+  color?: string;
+}
+
 export interface Floor {
   id: string;
   name: string;
@@ -234,6 +254,7 @@ export interface Floor {
   textAnnotations: TextAnnotation[];
   groups: ElementGroup[];
   entourage?: EntourageItem[];
+  areas?: AreaMarcada[];
 }
 
 export interface CustomModelDef {

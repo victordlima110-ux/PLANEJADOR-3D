@@ -4,7 +4,7 @@ import { splitWallGeometry } from '$lib/utils/splitWallGeometry';
 import { wallPathProfile } from '$lib/utils/wallProfiles';
 import { duplicatePlanSelection, pastePlanSelection, shiftedOpeningPosition } from '$lib/utils/duplicateSelection';
 import { writable, derived, get, type Writable } from 'svelte/store';
-import type { Project, Floor, Wall, Door, Window as Win, FurnitureItem, Point, Stair, Column, BackgroundImage, GuideLine, ElementGroup, EntourageItem, InterchangeState, Lote } from '$lib/models/types';
+import type { Project, Floor, Wall, Door, Window as Win, FurnitureItem, Point, Stair, Column, BackgroundImage, GuideLine, ElementGroup, EntourageItem, InterchangeState, Lote, AreaMarcada } from '$lib/models/types';
 import { loteValido, paredesForaDoLote } from '$lib/utils/lote';
 import { planWallResize, finitePoint, validPositiveDimension, validOpeningPosition, type WallEndpoint } from '$lib/utils/wallEditing';
 import { getOuterWalls } from '$lib/utils/outerWalls';
@@ -45,7 +45,7 @@ export const activeFloor = derived(currentProject, ($p) => {
   return $p.floors.find((f) => f.id === $p.activeFloorId) ?? $p.floors[0] ?? null;
 });
 
-export type Tool = 'select' | 'wall' | 'door' | 'window' | 'furniture' | 'text' | 'measure' | 'annotate';
+export type Tool = 'select' | 'wall' | 'door' | 'window' | 'furniture' | 'text' | 'measure' | 'annotate' | 'area';
 export const selectedTool = writable<Tool>('select');
 
 /** Shared activation for the sidebar and keyboard measurement tools. */
@@ -574,6 +574,28 @@ export const placingStair = writable<boolean>(false);
 // --- Entourage (2D presentation symbols) ---
 export const placingEntourageId = writable<string | null>(null);
 
+/**
+ * Cria uma área demarcada a partir de dois cantos opostos.
+ *
+ * O nome começa genérico porque o que importa no instante do desenho é ver o
+ * contorno aparecer; batizar vem logo depois, nas propriedades.
+ */
+export function addArea(start: Point, end: Point, name: string): string {
+  const id = uid();
+  mutate((f) => {
+    if (!f.areas) f.areas = [];
+    f.areas.push({ id, name, start, end });
+  }, 'Added area');
+  return id;
+}
+
+export function updateArea(id: string, updates: Partial<AreaMarcada>) {
+  mutate((f) => {
+    const area = f.areas?.find((a) => a.id === id);
+    if (area) Object.assign(area, updates);
+  }, undefined, coalesceKeyFor('area', id, updates));
+}
+
 export function addEntourageItem(defId: string, position: Point, width: number): string {
   const id = uid();
   mutate((f) => {
@@ -676,6 +698,7 @@ export function removeElement(id: string) {
     if (f.measurements) f.measurements = f.measurements.filter(item => item.id !== id);
     if (f.annotations) f.annotations = f.annotations.filter(item => item.id !== id);
     if (f.entourage) f.entourage = f.entourage.filter((e) => e.id !== id);
+    if (f.areas) f.areas = f.areas.filter((a) => a.id !== id);
     if (f.groups) f.groups = f.groups.map(group => ({ ...group, elementIds: group.elementIds.filter(itemId => !removedIds.has(itemId)) })).filter(group => group.elementIds.length >= 2);
   }, 'Deleted element');
 }
